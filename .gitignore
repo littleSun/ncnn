@@ -40,3 +40,5 @@
 ios_build/*
 ios_sim_build/*
 ncnn.framework
+tools/*
+examples/*
