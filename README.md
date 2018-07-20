@@ -11,6 +11,31 @@ ncnn 是一个为手机端极致优化的高性能神经网络前向计算框架
 此版本专为IOS编译，使用clang-gcd
 
 编译步骤
-1 sudo xcode-select --switch /Applications/Xcode.app/
-2 mkdir ios-build && cd ios-build
-3 make && make install
+1 build for iphone
+```
+sudo xcode-select --switch /Applications/Xcode.app/
+mkdir ios-build && cd ios-build
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../ios.toolchain.cmake -DIOS_PLATFORM=iPhoneOS ..
+make && make install
+```
+
+2 build for simulator
+```
+cd ..
+mkdir ios-sim-build && cd ios-sim-build
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../ios.toolchain.cmake -DIOS_PLATFORM=iPhoneSimulator ..
+make && make install
+```
+3 merge
+```
+cd ..
+mkdir -p ncnn.framework/Versions/A/Headers
+mkdir -p ncnn.framework/Versions/A/Resources
+ln -s A ncnn.framework/Versions/Current
+ln -s Versions/Current/Headers ncnn.framework/Headers
+ln -s Versions/Current/Resources ncnn.framework/Resources
+ln -s Versions/Current/ncnn ncnn.framework/ncnn
+lipo -create ios-build/install/lib/libncnn.a ios-build-sim/install/lib/libncnn.a -o ncnn.framework/Versions/A/ncnn
+cp -r ios-sim-build/install/include/* ncnn.framework/Versions/A/Headers/
+cp Info.plist ncnn.framework/Versions/A/Resources/
+```

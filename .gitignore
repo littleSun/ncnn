@@ -37,4 +37,6 @@
 *.out
 *.app
 .idea/*
+ios_build/*
+ios_sim_build/*
 ncnn.framework
