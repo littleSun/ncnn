@@ -69,8 +69,8 @@ set (CMAKE_CXX_OSX_COMPATIBILITY_VERSION_FLAG "${CMAKE_C_OSX_COMPATIBILITY_VERSI
 set (CMAKE_CXX_OSX_CURRENT_VERSION_FLAG "${CMAKE_C_OSX_CURRENT_VERSION_FLAG}")
 
 # Hidden visibilty is required for cxx on iOS 
-set (CMAKE_C_FLAGS_INIT "-isysroot ${CMAKE_OSX_SYSROOT} -miphoneos-version-min=6.0")
-set (CMAKE_CXX_FLAGS_INIT "-stdlib=libc++ -fvisibility=hidden -fvisibility-inlines-hidden -isysroot ${CMAKE_OSX_SYSROOT} -miphoneos-version-min=6.0")
+set (CMAKE_C_FLAGS_INIT "-isysroot ${CMAKE_OSX_SYSROOT} -miphoneos-version-min=7.0")
+set (CMAKE_CXX_FLAGS_INIT "-stdlib=libc++ -fvisibility=hidden -fvisibility-inlines-hidden -isysroot ${CMAKE_OSX_SYSROOT} -miphoneos-version-min=7.0")
 
 set (CMAKE_C_LINK_FLAGS "-Wl,-search_paths_first ${CMAKE_C_LINK_FLAGS}")
 set (CMAKE_CXX_LINK_FLAGS "-Wl,-search_paths_first ${CMAKE_CXX_LINK_FLAGS}")

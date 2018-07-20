@@ -17,118 +17,144 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(BatchNorm)
+    DEFINE_LAYER_CREATOR(BatchNorm)
 
-BatchNorm::BatchNorm()
-{
-    one_blob_only = true;
-    support_inplace = true;
-}
-
-int BatchNorm::load_param(const ParamDict& pd)
-{
-    channels = pd.get(0, 0);
-    eps = pd.get(1, 0.f);
-
-    return 0;
-}
-
-int BatchNorm::load_model(const ModelBin& mb)
-{
-    slope_data = mb.load(channels, 1);
-    if (slope_data.empty())
-        return -100;
-
-    mean_data = mb.load(channels, 1);
-    if (mean_data.empty())
-        return -100;
-
-    var_data = mb.load(channels, 1);
-    if (var_data.empty())
-        return -100;
-
-    bias_data = mb.load(channels, 1);
-    if (bias_data.empty())
-        return -100;
-
-    a_data.create(channels);
-    if (a_data.empty())
-        return -100;
-    b_data.create(channels);
-    if (b_data.empty())
-        return -100;
-
-    for (int i=0; i<channels; i++)
+    BatchNorm::BatchNorm()
     {
-        float sqrt_var = sqrt(var_data[i] + eps);
-        a_data[i] = bias_data[i] - slope_data[i] * mean_data[i] / sqrt_var;
-        b_data[i] = slope_data[i] / sqrt_var;
+        one_blob_only = true;
+        support_inplace = true;
     }
 
-    return 0;
-}
-
-int BatchNorm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    // a = bias - slope * mean / sqrt(var)
-    // b = slope / sqrt(var)
-    // value = b * value + a
-
-    int dims = bottom_top_blob.dims;
-
-    if (dims == 1)
+    int BatchNorm::load_param(const ParamDict& pd)
     {
-        int w = bottom_top_blob.w;
+        channels = pd.get(0, 0);
+        eps = pd.get(1, 0.f);
 
-        float* ptr = bottom_top_blob;
+        return 0;
+    }
 
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int i=0; i<w; i++)
+    int BatchNorm::load_model(const ModelBin& mb)
+    {
+        slope_data = mb.load(channels, 1);
+        if (slope_data.empty())
+            return -100;
+
+        mean_data = mb.load(channels, 1);
+        if (mean_data.empty())
+            return -100;
+
+        var_data = mb.load(channels, 1);
+        if (var_data.empty())
+            return -100;
+
+        bias_data = mb.load(channels, 1);
+        if (bias_data.empty())
+            return -100;
+
+        a_data.create(channels);
+        if (a_data.empty())
+            return -100;
+        b_data.create(channels);
+        if (b_data.empty())
+            return -100;
+
+        for (int i=0; i<channels; i++)
         {
-            ptr[i] = b_data[i] * ptr[i] + a_data[i];
+            float sqrt_var = sqrt(var_data[i] + eps);
+            a_data[i] = bias_data[i] - slope_data[i] * mean_data[i] / sqrt_var;
+            b_data[i] = slope_data[i] / sqrt_var;
         }
+
+        return 0;
     }
 
-    if (dims == 2)
+    int BatchNorm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
     {
-        int w = bottom_top_blob.w;
-        int h = bottom_top_blob.h;
+        // a = bias - slope * mean / sqrt(var)
+        // b = slope / sqrt(var)
+        // value = b * value + a
 
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int i=0; i<h; i++)
+        int dims = bottom_top_blob.dims;
+
+        if (dims == 1)
         {
-            float* ptr = bottom_top_blob.row(i);
-            float a = a_data[i];
-            float b = b_data[i];
+            int w = bottom_top_blob.w;
 
-            for (int j=0; j<w; j++)
+            float* ptr = bottom_top_blob;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int i=0; i<w; i++)
             {
-                ptr[j] = b * ptr[j] + a;
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+
+                    ptr[i] = b_data[i] * ptr[i] + a_data[i];
+
+#if __APPLE__
+                });
+#endif
             }
         }
-    }
 
-    if (dims == 3)
-    {
-        int w = bottom_top_blob.w;
-        int h = bottom_top_blob.h;
-        int size = w * h;
-
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
+        if (dims == 2)
         {
-            float* ptr = bottom_top_blob.channel(q);
-            float a = a_data[q];
-            float b = b_data[q];
+            int w = bottom_top_blob.w;
+            int h = bottom_top_blob.h;
 
-            for (int i=0; i<size; i++)
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int i=0; i<h; i++)
             {
-                ptr[i] = b * ptr[i] + a;
+
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+
+                    float* ptr = bottom_top_blob.row(i);
+                    float a = a_data[i];
+                    float b = b_data[i];
+
+                    for (int j=0; j<w; j++)
+                    {
+                        ptr[j] = b * ptr[j] + a;
+                    }
+#if __APPLE__
+                });
+#endif
+
             }
         }
-    }
 
-    return 0;
-}
+        if (dims == 3)
+        {
+            int w = bottom_top_blob.w;
+            int h = bottom_top_blob.h;
+            int size = w * h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+
+                    float* ptr = bottom_top_blob.channel(q);
+                    float a = a_data[q];
+                    float b = b_data[q];
+
+                    for (int i=0; i<size; i++)
+                    {
+                        ptr[i] = b * ptr[i] + a;
+                    }
+#if __APPLE__
+                });
+#endif
+
+
+            }
+        }
+
+        return 0;
+    }
 
 } // namespace ncnn

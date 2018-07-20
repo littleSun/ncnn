@@ -17,41 +17,47 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(ELU)
+    DEFINE_LAYER_CREATOR(ELU)
 
-ELU::ELU()
-{
-    one_blob_only = true;
-    support_inplace = true;
-}
-
-int ELU::load_param(const ParamDict& pd)
-{
-    alpha = pd.get(0, 0.1f);
-
-    return 0;
-}
-
-int ELU::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    int size = w * h;
-
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
+    ELU::ELU()
     {
-        float* ptr = bottom_top_blob.channel(q);
-
-        for (int i=0; i<size; i++)
-        {
-            if (ptr[i] < 0.f)
-                ptr[i] = alpha * (exp(ptr[i]) - 1.f);
-        }
+        one_blob_only = true;
+        support_inplace = true;
     }
 
-    return 0;
-}
+    int ELU::load_param(const ParamDict& pd)
+    {
+        alpha = pd.get(0, 0.1f);
+
+        return 0;
+    }
+
+    int ELU::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
+    {
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        int size = w * h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int q=0; q<channels; q++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                float* ptr = bottom_top_blob.channel(q);
+
+                for (int i=0; i<size; i++)
+                {
+                    if (ptr[i] < 0.f)
+                        ptr[i] = alpha * (exp(ptr[i]) - 1.f);
+                }
+#if __APPLE__
+            });
+#endif
+        }
+
+        return 0;
+    }
 
 } // namespace ncnn

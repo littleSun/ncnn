@@ -20,42 +20,45 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Eltwise_arm)
+    DEFINE_LAYER_CREATOR(Eltwise_arm)
 
-int Eltwise_arm::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_blobs, const Option& opt) const
-{
-    const Mat& bottom_blob = bottom_blobs[0];
-    int w = bottom_blob.w;
-    int h = bottom_blob.h;
-    int channels = bottom_blob.c;
-    size_t elemsize = bottom_blob.elemsize;
-    int size = w * h;
-
-    Mat& top_blob = top_blobs[0];
-    top_blob.create(w, h, channels, elemsize, opt.blob_allocator);
-    if (top_blob.empty())
-        return -100;
-
-    if (op_type == Operation_PROD)
+    int Eltwise_arm::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_blobs, const Option& opt) const
     {
-        // first blob
-        const Mat& bottom_blob1 = bottom_blobs[1];
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
+        const Mat& bottom_blob = bottom_blobs[0];
+        int w = bottom_blob.w;
+        int h = bottom_blob.h;
+        int channels = bottom_blob.c;
+        size_t elemsize = bottom_blob.elemsize;
+        int size = w * h;
+
+        Mat& top_blob = top_blobs[0];
+        top_blob.create(w, h, channels, elemsize, opt.blob_allocator);
+        if (top_blob.empty())
+            return -100;
+
+        if (op_type == Operation_PROD)
         {
-            const float* ptr = bottom_blob.channel(q);
-            const float* ptr1 = bottom_blob1.channel(q);
-            float* outptr = top_blob.channel(q);
+            // first blob
+            const Mat& bottom_blob1 = bottom_blobs[1];
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    const float* ptr = bottom_blob.channel(q);
+                    const float* ptr1 = bottom_blob1.channel(q);
+                    float* outptr = top_blob.channel(q);
 
 #if __ARM_NEON
-            int nn = size >> 2;
+                    int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-            int remain = size;
+                    int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -105,34 +108,40 @@ int Eltwise_arm::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>&
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                *outptr = *ptr * *ptr1;
+                    for (; remain>0; remain--)
+                    {
+                        *outptr = *ptr * *ptr1;
 
-                ptr++;
-                ptr1++;
-                outptr++;
+                        ptr++;
+                        ptr1++;
+                        outptr++;
+                    }
+#if __APPLE__
+                });
+#endif
             }
-        }
 
-        for (size_t b=2; b<bottom_blobs.size(); b++)
-        {
-            const Mat& bottom_blob1 = bottom_blobs[b];
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
+            for (size_t b=2; b<bottom_blobs.size(); b++)
             {
-                const float* ptr = bottom_blob1.channel(q);
-                float* outptr = top_blob.channel(q);
+                const Mat& bottom_blob1 = bottom_blobs[b];
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int q=0; q<channels; q++)
+                {
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        const float* ptr = bottom_blob1.channel(q);
+                        float* outptr = top_blob.channel(q);
 
 #if __ARM_NEON
-                int nn = size >> 2;
+                        int nn = size >> 2;
                 int remain = size - (nn << 2);
 #else
-                int remain = size;
+                        int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                        #if __aarch64__
                 if (nn > 0)
                 {
                 asm volatile(
@@ -178,38 +187,44 @@ int Eltwise_arm::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>&
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    *outptr *= *ptr;
+                        for (; remain>0; remain--)
+                        {
+                            *outptr *= *ptr;
 
-                    ptr++;
-                    outptr++;
+                            ptr++;
+                            outptr++;
+                        }
+#if __APPLE__
+                    });
+#endif
                 }
             }
         }
-    }
-    else if (op_type == Operation_SUM)
-    {
-        if (coeffs.w == 0)
+        else if (op_type == Operation_SUM)
         {
-            // first blob
-            const Mat& bottom_blob1 = bottom_blobs[1];
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
+            if (coeffs.w == 0)
             {
-                const float* ptr = bottom_blob.channel(q);
-                const float* ptr1 = bottom_blob1.channel(q);
-                float* outptr = top_blob.channel(q);
+                // first blob
+                const Mat& bottom_blob1 = bottom_blobs[1];
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int q=0; q<channels; q++)
+                {
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        const float* ptr = bottom_blob.channel(q);
+                        const float* ptr1 = bottom_blob1.channel(q);
+                        float* outptr = top_blob.channel(q);
 
 #if __ARM_NEON
-                int nn = size >> 2;
+                        int nn = size >> 2;
                 int remain = size - (nn << 2);
 #else
-                int remain = size;
+                        int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                        #if __aarch64__
                 if (nn > 0)
                 {
                 asm volatile(
@@ -259,34 +274,40 @@ int Eltwise_arm::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>&
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    *outptr = *ptr + *ptr1;
+                        for (; remain>0; remain--)
+                        {
+                            *outptr = *ptr + *ptr1;
 
-                    ptr++;
-                    ptr1++;
-                    outptr++;
+                            ptr++;
+                            ptr1++;
+                            outptr++;
+                        }
+#if __APPLE__
+                    });
+#endif
                 }
-            }
 
-            for (size_t b=2; b<bottom_blobs.size(); b++)
-            {
-                const Mat& bottom_blob1 = bottom_blobs[b];
-                #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
+                for (size_t b=2; b<bottom_blobs.size(); b++)
                 {
-                    const float* ptr = bottom_blob1.channel(q);
-                    float* outptr = top_blob.channel(q);
+                    const Mat& bottom_blob1 = bottom_blobs[b];
+#pragma omp parallel for num_threads(opt.num_threads)
+                    for (int q=0; q<channels; q++)
+                    {
+#if __APPLE__
+                        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                            const float* ptr = bottom_blob1.channel(q);
+                            float* outptr = top_blob.channel(q);
 
 #if __ARM_NEON
-                    int nn = size >> 2;
+                            int nn = size >> 2;
                     int remain = size - (nn << 2);
 #else
-                    int remain = size;
+                            int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                            #if __aarch64__
                     if (nn > 0)
                     {
                     asm volatile(
@@ -332,40 +353,46 @@ int Eltwise_arm::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>&
                     }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                    for (; remain>0; remain--)
-                    {
-                        *outptr += *ptr;
+                            for (; remain>0; remain--)
+                            {
+                                *outptr += *ptr;
 
-                        ptr++;
-                        outptr++;
+                                ptr++;
+                                outptr++;
+                            }
+#if __APPLE__
+                        });
+#endif
                     }
                 }
             }
-        }
-        else
-        {
-            const float* coeffs_ptr = coeffs;
-
-            // first blob
-            const Mat& bottom_blob1 = bottom_blobs[1];
-            float coeff0 = coeffs_ptr[0];
-            float coeff1 = coeffs_ptr[1];
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
+            else
             {
-                const float* ptr = bottom_blob.channel(q);
-                const float* ptr1 = bottom_blob1.channel(q);
-                float* outptr = top_blob.channel(q);
+                const float* coeffs_ptr = coeffs;
+
+                // first blob
+                const Mat& bottom_blob1 = bottom_blobs[1];
+                float coeff0 = coeffs_ptr[0];
+                float coeff1 = coeffs_ptr[1];
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int q=0; q<channels; q++)
+                {
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        const float* ptr = bottom_blob.channel(q);
+                        const float* ptr1 = bottom_blob1.channel(q);
+                        float* outptr = top_blob.channel(q);
 
 #if __ARM_NEON
-                int nn = size >> 2;
+                        int nn = size >> 2;
                 int remain = size - (nn << 2);
 #else
-                int remain = size;
+                        int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                float32x4_t _coeff0 = vdupq_n_f32(coeff0);
+                        float32x4_t _coeff0 = vdupq_n_f32(coeff0);
                 float32x4_t _coeff1 = vdupq_n_f32(coeff1);
 #if __aarch64__
                 if (nn > 0)
@@ -423,35 +450,41 @@ int Eltwise_arm::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>&
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    *outptr = *ptr * coeff0 + *ptr1 * coeff1;
+                        for (; remain>0; remain--)
+                        {
+                            *outptr = *ptr * coeff0 + *ptr1 * coeff1;
 
-                    ptr++;
-                    ptr1++;
-                    outptr++;
+                            ptr++;
+                            ptr1++;
+                            outptr++;
+                        }
+#if __APPLE__
+                    });
+#endif
                 }
-            }
 
-            for (size_t b=2; b<bottom_blobs.size(); b++)
-            {
-                const Mat& bottom_blob1 = bottom_blobs[b];
-                float coeff = coeffs_ptr[b];
-                #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
+                for (size_t b=2; b<bottom_blobs.size(); b++)
                 {
-                    const float* ptr = bottom_blob1.channel(q);
-                    float* outptr = top_blob.channel(q);
+                    const Mat& bottom_blob1 = bottom_blobs[b];
+                    float coeff = coeffs_ptr[b];
+#pragma omp parallel for num_threads(opt.num_threads)
+                    for (int q=0; q<channels; q++)
+                    {
+#if __APPLE__
+                        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                            const float* ptr = bottom_blob1.channel(q);
+                            float* outptr = top_blob.channel(q);
 
 #if __ARM_NEON
-                    int nn = size >> 2;
+                            int nn = size >> 2;
                     int remain = size - (nn << 2);
 #else
-                    int remain = size;
+                            int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                    float32x4_t _coeff = vdupq_n_f32(coeff);
+                            float32x4_t _coeff = vdupq_n_f32(coeff);
 #if __aarch64__
                     if (nn > 0)
                     {
@@ -500,37 +533,43 @@ int Eltwise_arm::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>&
                     }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                    for (; remain>0; remain--)
-                    {
-                        *outptr += *ptr * coeff;
+                            for (; remain>0; remain--)
+                            {
+                                *outptr += *ptr * coeff;
 
-                        ptr++;
-                        outptr++;
+                                ptr++;
+                                outptr++;
+                            }
+#if __APPLE__
+                        });
+#endif
                     }
                 }
             }
         }
-    }
-    else if (op_type == Operation_MAX)
-    {
-        // first blob
-        const Mat& bottom_blob1 = bottom_blobs[1];
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
+        else if (op_type == Operation_MAX)
         {
-            const float* ptr = bottom_blob.channel(q);
-            const float* ptr1 = bottom_blob1.channel(q);
-            float* outptr = top_blob.channel(q);
+            // first blob
+            const Mat& bottom_blob1 = bottom_blobs[1];
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    const float* ptr = bottom_blob.channel(q);
+                    const float* ptr1 = bottom_blob1.channel(q);
+                    float* outptr = top_blob.channel(q);
 
 #if __ARM_NEON
-            int nn = size >> 2;
+                    int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-            int remain = size;
+                    int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -580,34 +619,40 @@ int Eltwise_arm::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>&
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                *outptr = std::max(*ptr, *ptr1);
+                    for (; remain>0; remain--)
+                    {
+                        *outptr = std::max(*ptr, *ptr1);
 
-                ptr++;
-                ptr1++;
-                outptr++;
+                        ptr++;
+                        ptr1++;
+                        outptr++;
+                    }
+#if __APPLE__
+                });
+#endif
             }
-        }
 
-        for (size_t b=2; b<bottom_blobs.size(); b++)
-        {
-            const Mat& bottom_blob1 = bottom_blobs[b];
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
+            for (size_t b=2; b<bottom_blobs.size(); b++)
             {
-                const float* ptr = bottom_blob1.channel(q);
-                float* outptr = top_blob.channel(q);
+                const Mat& bottom_blob1 = bottom_blobs[b];
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int q=0; q<channels; q++)
+                {
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        const float* ptr = bottom_blob1.channel(q);
+                        float* outptr = top_blob.channel(q);
 
 #if __ARM_NEON
-                int nn = size >> 2;
+                        int nn = size >> 2;
                 int remain = size - (nn << 2);
 #else
-                int remain = size;
+                        int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                        #if __aarch64__
                 if (nn > 0)
                 {
                 asm volatile(
@@ -653,18 +698,21 @@ int Eltwise_arm::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>&
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    *outptr = std::max(*ptr, *outptr);
+                        for (; remain>0; remain--)
+                        {
+                            *outptr = std::max(*ptr, *outptr);
 
-                    ptr++;
-                    outptr++;
+                            ptr++;
+                            outptr++;
+                        }
+#if __APPLE__
+                    });
+#endif
                 }
             }
         }
-    }
 
-    return 0;
-}
+        return 0;
+    }
 
 } // namespace ncnn

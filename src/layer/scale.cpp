@@ -16,161 +16,197 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Scale)
+    DEFINE_LAYER_CREATOR(Scale)
 
-Scale::Scale()
-{
-    one_blob_only = true;
-    support_inplace = true;
-}
-
-int Scale::load_param(const ParamDict& pd)
-{
-    scale_data_size = pd.get(0, 0);
-    bias_term = pd.get(1, 0);
-
-    if (scale_data_size == -233)
-        one_blob_only = false;
-
-    return 0;
-}
-
-int Scale::load_model(const ModelBin& mb)
-{
-    if (scale_data_size != -233)
+    Scale::Scale()
     {
-        scale_data = mb.load(scale_data_size, 1);
-        if (scale_data.empty())
-            return -100;
+        one_blob_only = true;
+        support_inplace = true;
     }
 
-    if (bias_term)
+    int Scale::load_param(const ParamDict& pd)
     {
-        bias_data = mb.load(scale_data_size, 1);
-        if (bias_data.empty())
-            return -100;
+        scale_data_size = pd.get(0, 0);
+        bias_term = pd.get(1, 0);
+
+        if (scale_data_size == -233)
+            one_blob_only = false;
+
+        return 0;
     }
 
-    return 0;
-}
-
-int Scale::forward_inplace(std::vector<Mat>& bottom_top_blobs, const Option& opt) const
-{
-    Mat& bottom_top_blob = bottom_top_blobs[0];
-    const Mat& scale_blob = bottom_top_blobs[1];
-
-    int dims = bottom_top_blob.dims;
-
-    if (dims == 1)
+    int Scale::load_model(const ModelBin& mb)
     {
-        int w = bottom_top_blob.w;
-
-        float* ptr = bottom_top_blob;
+        if (scale_data_size != -233)
+        {
+            scale_data = mb.load(scale_data_size, 1);
+            if (scale_data.empty())
+                return -100;
+        }
 
         if (bias_term)
         {
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int i=0; i<w; i++)
-            {
-                ptr[i] = ptr[i] * scale_blob[i] + bias_data[i];
-            }
+            bias_data = mb.load(scale_data_size, 1);
+            if (bias_data.empty())
+                return -100;
         }
-        else
-        {
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int i=0; i<w; i++)
-            {
-                ptr[i] *= scale_blob[i];
-            }
-        }
+
+        return 0;
     }
 
-    if (dims == 2)
+    int Scale::forward_inplace(std::vector<Mat>& bottom_top_blobs, const Option& opt) const
     {
-        int w = bottom_top_blob.w;
-        int h = bottom_top_blob.h;
+        Mat& bottom_top_blob = bottom_top_blobs[0];
+        const Mat& scale_blob = bottom_top_blobs[1];
 
-        if (bias_term)
+        int dims = bottom_top_blob.dims;
+
+        if (dims == 1)
         {
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int i=0; i<h; i++)
-            {
-                float* ptr = bottom_top_blob.row(i);
-                float s = scale_blob[i];
-                float bias = bias_data[i];
+            int w = bottom_top_blob.w;
 
-                for (int j=0; j<w; j++)
+            float* ptr = bottom_top_blob;
+
+            if (bias_term)
+            {
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int i=0; i<w; i++)
                 {
-                    ptr[j] = ptr[j] * s + bias;
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        ptr[i] = ptr[i] * scale_blob[i] + bias_data[i];
+#if __APPLE__
+                    });
+#endif
+                }
+            }
+            else
+            {
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int i=0; i<w; i++)
+                {
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        ptr[i] *= scale_blob[i];
+#if __APPLE__
+                    });
+#endif
                 }
             }
         }
-        else
-        {
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int i=0; i<h; i++)
-            {
-                float* ptr = bottom_top_blob.row(i);
-                float s = scale_blob[i];
 
-                for (int j=0; j<w; j++)
+        if (dims == 2)
+        {
+            int w = bottom_top_blob.w;
+            int h = bottom_top_blob.h;
+
+            if (bias_term)
+            {
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int i=0; i<h; i++)
                 {
-                    ptr[j] *= s;
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        float* ptr = bottom_top_blob.row(i);
+                        float s = scale_blob[i];
+                        float bias = bias_data[i];
+
+                        for (int j=0; j<w; j++)
+                        {
+                            ptr[j] = ptr[j] * s + bias;
+                        }
+#if __APPLE__
+                    });
+#endif
+                }
+            }
+            else
+            {
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int i=0; i<h; i++)
+                {
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        float* ptr = bottom_top_blob.row(i);
+                        float s = scale_blob[i];
+
+                        for (int j=0; j<w; j++)
+                        {
+                            ptr[j] *= s;
+                        }
+#if __APPLE__
+                    });
+#endif
                 }
             }
         }
+
+        if (dims == 3)
+        {
+            int w = bottom_top_blob.w;
+            int h = bottom_top_blob.h;
+            int channels = bottom_top_blob.c;
+            int size = w * h;
+
+            if (bias_term)
+            {
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int q=0; q<channels; q++)
+                {
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        float* ptr = bottom_top_blob.channel(q);
+
+                        float s = scale_blob[q];
+                        float bias = bias_data[q];
+
+                        for (int i=0; i<size; i++)
+                        {
+                            ptr[i] = ptr[i] * s + bias;
+                        }
+#if __APPLE__
+                    });
+#endif
+                }
+            }
+            else
+            {
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int q=0; q<channels; q++)
+                {
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        float* ptr = bottom_top_blob.channel(q);
+
+                        float s = scale_blob[q];
+
+                        for (int i=0; i<size; i++)
+                        {
+                            ptr[i] *= s;
+                        }
+#if __APPLE__
+                    });
+#endif
+                }
+            }
+        }
+
+        return 0;
     }
 
-    if (dims == 3)
+    int Scale::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
     {
-        int w = bottom_top_blob.w;
-        int h = bottom_top_blob.h;
-        int channels = bottom_top_blob.c;
-        int size = w * h;
+        std::vector<Mat> bottom_top_blobs(2);
+        bottom_top_blobs[0] = bottom_top_blob;
+        bottom_top_blobs[1] = scale_data;
 
-        if (bias_term)
-        {
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
-                float* ptr = bottom_top_blob.channel(q);
-
-                float s = scale_blob[q];
-                float bias = bias_data[q];
-
-                for (int i=0; i<size; i++)
-                {
-                    ptr[i] = ptr[i] * s + bias;
-                }
-            }
-        }
-        else
-        {
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
-                float* ptr = bottom_top_blob.channel(q);
-
-                float s = scale_blob[q];
-
-                for (int i=0; i<size; i++)
-                {
-                    ptr[i] *= s;
-                }
-            }
-        }
+        return forward_inplace(bottom_top_blobs, opt);
     }
-
-    return 0;
-}
-
-int Scale::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    std::vector<Mat> bottom_top_blobs(2);
-    bottom_top_blobs[0] = bottom_top_blob;
-    bottom_top_blobs[1] = scale_data;
-
-    return forward_inplace(bottom_top_blobs, opt);
-}
 
 } // namespace ncnn

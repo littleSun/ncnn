@@ -16,104 +16,122 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Tile)
+    DEFINE_LAYER_CREATOR(Tile)
 
-Tile::Tile()
-{
-    one_blob_only = true;
-    support_inplace = false;
-}
-
-int Tile::load_param(const ParamDict& pd)
-{
-    dim = pd.get(0, 0);
-    tiles = pd.get(1, 1);
-
-    return 0;
-}
-
-int Tile::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
-{
-    int w = bottom_blob.w;
-    int h = bottom_blob.h;
-    int channels = bottom_blob.c;
-    size_t elemsize = bottom_blob.elemsize;
-
-    if (dim == 0)
+    Tile::Tile()
     {
-        top_blob.create(w, h, channels * tiles, elemsize, opt.blob_allocator);
-        if (top_blob.empty())
-            return -100;
-
-        const float* ptr = bottom_blob;
-        int size = bottom_blob.cstep * channels;
-
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int p=0; p<tiles; p++)
-        {
-            float* outptr = top_blob.channel(p * channels);
-
-            for (int i=0; i<size; i++)
-            {
-                outptr[i] = ptr[i];
-            }
-        }
+        one_blob_only = true;
+        support_inplace = false;
     }
-    else if (dim == 1)
+
+    int Tile::load_param(const ParamDict& pd)
     {
-        top_blob.create(w, h * tiles, channels, elemsize, opt.blob_allocator);
-        if (top_blob.empty())
-            return -100;
+        dim = pd.get(0, 0);
+        tiles = pd.get(1, 1);
 
-        int size = w * h;
+        return 0;
+    }
 
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
+    int Tile::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
+    {
+        int w = bottom_blob.w;
+        int h = bottom_blob.h;
+        int channels = bottom_blob.c;
+        size_t elemsize = bottom_blob.elemsize;
+
+        if (dim == 0)
         {
-            const float* ptr = bottom_blob.channel(q);
-            float* outptr = top_blob.channel(q);
+            top_blob.create(w, h, channels * tiles, elemsize, opt.blob_allocator);
+            if (top_blob.empty())
+                return -100;
 
+            const float* ptr = bottom_blob;
+            int size = bottom_blob.cstep * channels;
+
+#pragma omp parallel for num_threads(opt.num_threads)
             for (int p=0; p<tiles; p++)
             {
-                for (int i=0; i<size; i++)
-                {
-                    outptr[i] = ptr[i];
-                }
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    float* outptr = top_blob.channel(p * channels);
 
-                outptr += size;
-            }
-        }
-    }
-    else if (dim == 2)
-    {
-        top_blob.create(w * tiles, h, channels, elemsize, opt.blob_allocator);
-        if (top_blob.empty())
-            return -100;
-
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
-            const float* ptr = bottom_blob.channel(q);
-            float* outptr = top_blob.channel(q);
-
-            for (int i = 0; i < h; i++)
-            {
-                for (int p=0; p<tiles; p++)
-                {
-                    for (int j = 0; j < w; j++)
+                    for (int i=0; i<size; i++)
                     {
-                        outptr[j] = ptr[j];
+                        outptr[i] = ptr[i];
                     }
-
-                    outptr += w;
-                }
-
-                ptr += w;
+#if __APPLE__
+                });
+#endif
             }
         }
-    }
+        else if (dim == 1)
+        {
+            top_blob.create(w, h * tiles, channels, elemsize, opt.blob_allocator);
+            if (top_blob.empty())
+                return -100;
 
-    return 0;
-}
+            int size = w * h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    const float* ptr = bottom_blob.channel(q);
+                    float* outptr = top_blob.channel(q);
+
+                    for (int p=0; p<tiles; p++)
+                    {
+                        for (int i=0; i<size; i++)
+                        {
+                            outptr[i] = ptr[i];
+                        }
+
+                        outptr += size;
+                    }
+#if __APPLE__
+                });
+#endif
+            }
+        }
+        else if (dim == 2)
+        {
+            top_blob.create(w * tiles, h, channels, elemsize, opt.blob_allocator);
+            if (top_blob.empty())
+                return -100;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    const float* ptr = bottom_blob.channel(q);
+                    float* outptr = top_blob.channel(q);
+
+                    for (int i = 0; i < h; i++)
+                    {
+                        for (int p=0; p<tiles; p++)
+                        {
+                            for (int j = 0; j < w; j++)
+                            {
+                                outptr[j] = ptr[j];
+                            }
+
+                            outptr += w;
+                        }
+
+                        ptr += w;
+                    }
+#if __APPLE__
+                });
+#endif
+            }
+        }
+
+        return 0;
+    }
 
 } // namespace ncnn

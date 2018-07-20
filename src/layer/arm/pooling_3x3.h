@@ -26,27 +26,31 @@ static void pooling3x3s2_max_neon(const Mat& bottom_blob, Mat& top_blob, const O
 
     const int tailstep = w - 2*outw + w;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int q=0; q<inch; q++)
     {
-        const float* img0 = bottom_blob.channel(q);
-        float* outptr = top_blob.channel(q);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
 
-        const float* r0 = img0;
-        const float* r1 = img0 + w;
-        const float* r2 = img0 + w*2;
+            const float* img0 = bottom_blob.channel(q);
+            float* outptr = top_blob.channel(q);
 
-        for (int i = 0; i < outh; i++)
-        {
+            const float* r0 = img0;
+            const float* r1 = img0 + w;
+            const float* r2 = img0 + w*2;
+
+            for (int i = 0; i < outh; i++)
+            {
 #if __ARM_NEON
-            int nn = outw >> 2;
+                int nn = outw >> 2;
             int remain = outw - (nn << 2);
 #else
-            int remain = outw;
+                int remain = outw;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                #if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -175,23 +179,27 @@ static void pooling3x3s2_max_neon(const Mat& bottom_blob, Mat& top_blob, const O
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                float max0 = std::max(std::max(r0[0], r0[1]), r0[2]);
-                float max1 = std::max(std::max(r1[0], r1[1]), r1[2]);
-                float max2 = std::max(std::max(r2[0], r2[1]), r2[2]);
+                for (; remain>0; remain--)
+                {
+                    float max0 = std::max(std::max(r0[0], r0[1]), r0[2]);
+                    float max1 = std::max(std::max(r1[0], r1[1]), r1[2]);
+                    float max2 = std::max(std::max(r2[0], r2[1]), r2[2]);
 
-                *outptr = std::max(std::max(max0, max1), max2);
+                    *outptr = std::max(std::max(max0, max1), max2);
 
-                r0 += 2;
-                r1 += 2;
-                r2 += 2;
-                outptr++;
+                    r0 += 2;
+                    r1 += 2;
+                    r2 += 2;
+                    outptr++;
+                }
+
+                r0 += tailstep;//1 + w;
+                r1 += tailstep;//1 + w;
+                r2 += tailstep;//1 + w;
             }
+#if __APPLE__
+        });
+#endif
 
-            r0 += tailstep;//1 + w;
-            r1 += tailstep;//1 + w;
-            r2 += tailstep;//1 + w;
-        }
     }
 }

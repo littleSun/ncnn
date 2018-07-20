@@ -17,97 +17,109 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Interp);
+    DEFINE_LAYER_CREATOR(Interp);
 
-Interp::Interp()
-{
-    one_blob_only = true;
-}
-
-int Interp::load_param(const ParamDict& pd)
-{
-    resize_type = pd.get(0, 0);
-    height_scale = pd.get(1, 1.f);
-    width_scale = pd.get(2, 1.f);
-    output_height = pd.get(3, 0);
-    output_width = pd.get(4, 0);
-
-    return 0;
-}
-
-int Interp::forward(const Mat &bottom_blob, Mat &top_blob, const Option& opt) const
-{
-    int h = bottom_blob.h;
-    int w = bottom_blob.w;
-    int c = bottom_blob.c;
-    size_t elemsize = bottom_blob.elemsize;
-
-    int oh = output_height;
-    int ow = output_width;
-    if (bottom_blob.dims == 1)
+    Interp::Interp()
     {
-        h = 1;
-        w = 1;
-        c = bottom_blob.w;
+        one_blob_only = true;
     }
-    if (oh == 0 || ow == 0)
+
+    int Interp::load_param(const ParamDict& pd)
     {
-        oh = h * height_scale;
-        ow = w * width_scale;
-    }
-    if (oh == h && ow == w)
-    {
-        top_blob = bottom_blob;
+        resize_type = pd.get(0, 0);
+        height_scale = pd.get(1, 1.f);
+        width_scale = pd.get(2, 1.f);
+        output_height = pd.get(3, 0);
+        output_width = pd.get(4, 0);
+
         return 0;
     }
-    top_blob.create(ow, oh, c, elemsize, opt.blob_allocator);
-    if (top_blob.empty())
-        return -100;
 
-    if (bottom_blob.dims == 1)
+    int Interp::forward(const Mat &bottom_blob, Mat &top_blob, const Option& opt) const
     {
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q = 0; q < c; ++q)
+        int h = bottom_blob.h;
+        int w = bottom_blob.w;
+        int c = bottom_blob.c;
+        size_t elemsize = bottom_blob.elemsize;
+
+        int oh = output_height;
+        int ow = output_width;
+        if (bottom_blob.dims == 1)
         {
-            Mat top_blob_c = top_blob.channel(q);
-            const float *ptr = ((const float*)bottom_blob.data + q);
-            top_blob_c.fill(*ptr);
+            h = 1;
+            w = 1;
+            c = bottom_blob.w;
         }
-        return 0;
-    }
-
-    if (resize_type == 1)//nearest
-    {
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q = 0; q < c; ++q)
+        if (oh == 0 || ow == 0)
         {
-            const float *ptr = bottom_blob.channel(q);
-            float *output_ptr = top_blob.channel(q);
-            for (int y = 0; y < oh; ++y)
+            oh = h * height_scale;
+            ow = w * width_scale;
+        }
+        if (oh == h && ow == w)
+        {
+            top_blob = bottom_blob;
+            return 0;
+        }
+        top_blob.create(ow, oh, c, elemsize, opt.blob_allocator);
+        if (top_blob.empty())
+            return -100;
+
+        if (bottom_blob.dims == 1)
+        {
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q = 0; q < c; ++q)
             {
-                const int in_y = std::min((int) (y / height_scale), (h - 1));
-                for (int x = 0; x < ow; ++x)
-                {
-                    const int in_x = std::min((int) (x / width_scale), (w - 1));
-                    output_ptr[ow * y + x] = ptr[in_y * w + in_x];
-                }
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    Mat top_blob_c = top_blob.channel(q);
+                    const float *ptr = ((const float*)bottom_blob.data + q);
+                    top_blob_c.fill(*ptr);
+#if __APPLE__
+                });
+#endif
             }
+            return 0;
         }
-        return 0;
 
-    }
-    else if (resize_type == 2)// bilinear
-    {
-        resize_bilinear(bottom_blob, top_blob, ow, oh);
-        return 0;
+        if (resize_type == 1)//nearest
+        {
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q = 0; q < c; ++q)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    const float *ptr = bottom_blob.channel(q);
+                    float *output_ptr = top_blob.channel(q);
+                    for (int y = 0; y < oh; ++y)
+                    {
+                        const int in_y = std::min((int) (y / height_scale), (h - 1));
+                        for (int x = 0; x < ow; ++x)
+                        {
+                            const int in_x = std::min((int) (x / width_scale), (w - 1));
+                            output_ptr[ow * y + x] = ptr[in_y * w + in_x];
+                        }
+                    }
+#if __APPLE__
+                });
+#endif
+            }
+            return 0;
 
+        }
+        else if (resize_type == 2)// bilinear
+        {
+            resize_bilinear(bottom_blob, top_blob, ow, oh);
+            return 0;
+
+        }
+        else
+        {
+            fprintf(stderr, "unsupported resize type %d %d %d\n", resize_type, oh, ow);
+            return -233;
+        }
     }
-    else
-    {
-        fprintf(stderr, "unsupported resize type %d %d %d\n", resize_type, oh, ow);
-        return -233;
-    }
-}
 
 
 } // namespace ncnn

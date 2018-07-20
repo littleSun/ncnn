@@ -23,29 +23,33 @@ static void pooling2x2s2_max_neon(const Mat& bottom_blob, Mat& top_blob, const O
 
     int outw = top_blob.w;
     int outh = top_blob.h;
-    
+
     const int tailstep = w - 2*outw + w;
-    
-    #pragma omp parallel for num_threads(opt.num_threads)
+
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int q=0; q<inch; q++)
     {
-        const float* img0 = bottom_blob.channel(q);
-        float* outptr = top_blob.channel(q);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
 
-        const float* r0 = img0;
-        const float* r1 = img0 + w;
+            const float* img0 = bottom_blob.channel(q);
+            float* outptr = top_blob.channel(q);
 
-        for (int i = 0; i < outh; i++)
-        {
+            const float* r0 = img0;
+            const float* r1 = img0 + w;
+
+            for (int i = 0; i < outh; i++)
+            {
 #if __ARM_NEON
-            int nn = outw >> 2;
+                int nn = outw >> 2;
             int remain = outw - (nn << 2);
 #else
-            int remain = outw;
+                int remain = outw;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                #if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -100,20 +104,23 @@ static void pooling2x2s2_max_neon(const Mat& bottom_blob, Mat& top_blob, const O
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                float max0 = std::max(r0[0], r0[1]);
-                float max1 = std::max(r1[0], r1[1]);
+                for (; remain>0; remain--)
+                {
+                    float max0 = std::max(r0[0], r0[1]);
+                    float max1 = std::max(r1[0], r1[1]);
 
-                *outptr = std::max(max0, max1);
+                    *outptr = std::max(max0, max1);
 
-                r0 += 2;
-                r1 += 2;
-                outptr++;
+                    r0 += 2;
+                    r1 += 2;
+                    outptr++;
+                }
+
+                r0 += tailstep;
+                r1 += tailstep;
             }
-
-            r0 += tailstep;
-            r1 += tailstep;
-        }
+#if __APPLE__
+        });
+#endif
     }
 }

@@ -20,40 +20,43 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Scale_arm)
+    DEFINE_LAYER_CREATOR(Scale_arm)
 
-int Scale_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int dims = bottom_top_blob.dims;
-    if (dims != 3)
-        return Scale::forward_inplace(bottom_top_blob, opt);
-
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    int size = w * h;
-
-    if (bias_term)
+    int Scale_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
     {
-        const float* scale_ptr = scale_data;
-        const float* bias_ptr = bias_data;
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
-            float* ptr = bottom_top_blob.channel(q);
+        int dims = bottom_top_blob.dims;
+        if (dims != 3)
+            return Scale::forward_inplace(bottom_top_blob, opt);
 
-            float s = scale_ptr[q];
-            float bias = bias_ptr[q];
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        int size = w * h;
+
+        if (bias_term)
+        {
+            const float* scale_ptr = scale_data;
+            const float* bias_ptr = bias_data;
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    float* ptr = bottom_top_blob.channel(q);
+
+                    float s = scale_ptr[q];
+                    float bias = bias_ptr[q];
 
 #if __ARM_NEON
-            int nn = size >> 2;
+                    int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-            int remain = size;
+                    int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-            float32x4_t _s = vdupq_n_f32(s);
+                    float32x4_t _s = vdupq_n_f32(s);
             float32x4_t _bias = vdupq_n_f32(bias);
             for (; nn>0; nn--)
             {
@@ -65,33 +68,39 @@ int Scale_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
             }
 #endif // __ARM_NEON
 
-            for (; remain>0; remain--)
-            {
-                *ptr = *ptr * s + bias;
+                    for (; remain>0; remain--)
+                    {
+                        *ptr = *ptr * s + bias;
 
-                ptr++;
+                        ptr++;
+                    }
+#if __APPLE__
+                });
+#endif
             }
         }
-    }
-    else
-    {
-        const float* scale_ptr = scale_data;
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
+        else
         {
-            float* ptr = bottom_top_blob.channel(q);
+            const float* scale_ptr = scale_data;
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    float* ptr = bottom_top_blob.channel(q);
 
-            float s = scale_ptr[q];
+                    float s = scale_ptr[q];
 
 #if __ARM_NEON
-            int nn = size >> 2;
+                    int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-            int remain = size;
+                    int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-            float32x4_t _s = vdupq_n_f32(s);
+                    float32x4_t _s = vdupq_n_f32(s);
             for (; nn>0; nn--)
             {
                 float32x4_t _p = vld1q_f32(ptr);
@@ -102,16 +111,19 @@ int Scale_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
             }
 #endif // __ARM_NEON
 
-            for (; remain>0; remain--)
-            {
-                *ptr *= s;
+                    for (; remain>0; remain--)
+                    {
+                        *ptr *= s;
 
-                ptr++;
+                        ptr++;
+                    }
+#if __APPLE__
+                });
+#endif
             }
         }
-    }
 
-    return 0;
-}
+        return 0;
+    }
 
 } // namespace ncnn

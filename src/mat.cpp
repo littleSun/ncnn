@@ -23,28 +23,31 @@
 
 namespace ncnn {
 
-void Mat::substract_mean_normalize(const float* mean_vals, const float* norm_vals)
-{
-    int size = w * h;
-
-    if (mean_vals && !norm_vals)
+    void Mat::substract_mean_normalize(const float* mean_vals, const float* norm_vals)
     {
-        // substract mean only
-        #pragma omp parallel for
-        for (int q=0; q<c; q++)
+        int size = w * h;
+
+        if (mean_vals && !norm_vals)
         {
-            float* ptr = channel(q);//data + cstep * q;
-            const float mean = mean_vals[q];
+            // substract mean only
+#pragma omp parallel for
+            for (int q=0; q<c; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    float* ptr = channel(q);//data + cstep * q;
+                    const float mean = mean_vals[q];
 
 #if __ARM_NEON
-            int nn = size >> 2;
+                    int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-            int remain = size;
+                    int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -86,31 +89,37 @@ void Mat::substract_mean_normalize(const float* mean_vals, const float* norm_val
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                *ptr -= mean;
-                ptr++;
+                    for (; remain>0; remain--)
+                    {
+                        *ptr -= mean;
+                        ptr++;
+                    }
+#if __APPLE__
+                });
+#endif
             }
         }
-    }
-    else if (!mean_vals && norm_vals)
-    {
-        // normalize only
-        #pragma omp parallel for
-        for (int q=0; q<c; q++)
+        else if (!mean_vals && norm_vals)
         {
-            float* ptr = channel(q);//data + cstep * q;
-            const float norm = norm_vals[q];
+            // normalize only
+#pragma omp parallel for
+            for (int q=0; q<c; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    float* ptr = channel(q);//data + cstep * q;
+                    const float norm = norm_vals[q];
 
 #if __ARM_NEON
-            int nn = size >> 2;
+                    int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-            int remain = size;
+                    int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -152,32 +161,38 @@ void Mat::substract_mean_normalize(const float* mean_vals, const float* norm_val
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                *ptr *= norm;
-                ptr++;
+                    for (; remain>0; remain--)
+                    {
+                        *ptr *= norm;
+                        ptr++;
+                    }
+#if __APPLE__
+                });
+#endif
             }
         }
-    }
-    else if (mean_vals && norm_vals)
-    {
-        // substract mean and normalize
-        #pragma omp parallel for
-        for (int q=0; q<c; q++)
+        else if (mean_vals && norm_vals)
         {
-            float* ptr = channel(q);//data + cstep * q;
-            const float mean = mean_vals[q];
-            const float norm = norm_vals[q];
+            // substract mean and normalize
+#pragma omp parallel for
+            for (int q=0; q<c; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    float* ptr = channel(q);//data + cstep * q;
+                    const float mean = mean_vals[q];
+                    const float norm = norm_vals[q];
 
 #if __ARM_NEON
-            int nn = size >> 2;
+                    int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-            int remain = size;
+                    int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -225,84 +240,87 @@ void Mat::substract_mean_normalize(const float* mean_vals, const float* norm_val
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                *ptr = (*ptr - mean) * norm;
-                ptr++;
+                    for (; remain>0; remain--)
+                    {
+                        *ptr = (*ptr - mean) * norm;
+                        ptr++;
+                    }
+#if __APPLE__
+                });
+#endif
             }
         }
     }
-}
 
 // convert half precision floating point to float
-static float half2float(unsigned short value)
-{
-    // 1 : 5 : 10
-    unsigned short sign = (value & 0x8000) >> 15;
-    unsigned short exponent = (value & 0x7c00) >> 10;
-    unsigned short significand = value & 0x03FF;
+    static float half2float(unsigned short value)
+    {
+        // 1 : 5 : 10
+        unsigned short sign = (value & 0x8000) >> 15;
+        unsigned short exponent = (value & 0x7c00) >> 10;
+        unsigned short significand = value & 0x03FF;
 
 //     fprintf(stderr, "%d %d %d\n", sign, exponent, significand);
 
-    // 1 : 8 : 23
-    union
-    {
-        unsigned int u;
-        float f;
-    } tmp;
-    if (exponent == 0)
-    {
-        if (significand == 0)
+        // 1 : 8 : 23
+        union
         {
-            // zero
-            tmp.u = (sign << 31);
+            unsigned int u;
+            float f;
+        } tmp;
+        if (exponent == 0)
+        {
+            if (significand == 0)
+            {
+                // zero
+                tmp.u = (sign << 31);
+            }
+            else
+            {
+                // denormal
+                exponent = 0;
+                // find non-zero bit
+                while ((significand & 0x200) == 0)
+                {
+                    significand <<= 1;
+                    exponent++;
+                }
+                significand <<= 1;
+                significand &= 0x3FF;
+                tmp.u = (sign << 31) | ((-exponent + (-15 + 127)) << 23) | (significand << 13);
+            }
+        }
+        else if (exponent == 0x1F)
+        {
+            // infinity or NaN
+            tmp.u = (sign << 31) | (0xFF << 23) | (significand << 13);
         }
         else
         {
-            // denormal
-            exponent = 0;
-            // find non-zero bit
-            while ((significand & 0x200) == 0)
-            {
-                significand <<= 1;
-                exponent++;
-            }
-            significand <<= 1;
-            significand &= 0x3FF;
-            tmp.u = (sign << 31) | ((-exponent + (-15 + 127)) << 23) | (significand << 13);
+            // normalized
+            tmp.u = (sign << 31) | ((exponent + (-15 + 127)) << 23) | (significand << 13);
         }
+
+        return tmp.f;
     }
-    else if (exponent == 0x1F)
+
+    Mat Mat::from_float16(const unsigned short* data, int size)
     {
-        // infinity or NaN
-        tmp.u = (sign << 31) | (0xFF << 23) | (significand << 13);
-    }
-    else
-    {
-        // normalized
-        tmp.u = (sign << 31) | ((exponent + (-15 + 127)) << 23) | (significand << 13);
-    }
+        Mat m(size);
+        if (m.empty())
+            return m;
 
-    return tmp.f;
-}
-
-Mat Mat::from_float16(const unsigned short* data, int size)
-{
-    Mat m(size);
-    if (m.empty())
-        return m;
-
-    float* ptr = m;//.data;
+        float* ptr = m;//.data;
 
 #if __ARM_NEON && (__ARM_FP & 2)
-    int nn = cpu_support_arm_vfpv4() ? size >> 2 : 0;
+        int nn = cpu_support_arm_vfpv4() ? size >> 2 : 0;
     int remain = size - (nn << 2);
 #else
-    int remain = size;
+        int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON && (__ARM_FP & 2)
-#if __aarch64__
+        #if __aarch64__
     if (nn > 0)
     {
     asm volatile(
@@ -343,357 +361,369 @@ Mat Mat::from_float16(const unsigned short* data, int size)
     }
 #endif // __aarch64__
 #endif // __ARM_NEON
-    for (; remain>0; remain--)
-    {
-        *ptr = half2float(*data);
+        for (; remain>0; remain--)
+        {
+            *ptr = half2float(*data);
 
-        data++;
-        ptr++;
+            data++;
+            ptr++;
+        }
+
+        return m;
     }
 
-    return m;
-}
-
-static void copy_make_border_image(const Mat& src, Mat& dst, int top, int left, int type, float v)
-{
-    int w = dst.w;
-    int h = dst.h;
-
-    const float* ptr = src;//.data;
-    float* outptr = dst;//.data;
-
-    if (type == BORDER_CONSTANT)
+    static void copy_make_border_image(const Mat& src, Mat& dst, int top, int left, int type, float v)
     {
-        int y = 0;
-        // fill top
-        for (; y < top; y++)
+        int w = dst.w;
+        int h = dst.h;
+
+        const float* ptr = src;//.data;
+        float* outptr = dst;//.data;
+
+        if (type == BORDER_CONSTANT)
         {
-            int x = 0;
-            for (; x < w; x++)
+            int y = 0;
+            // fill top
+            for (; y < top; y++)
             {
-                outptr[x] = v;
-            }
-            outptr += w;
-        }
-        // fill center
-        for (; y < (top + src.h); y++)
-        {
-            int x = 0;
-            for (; x < left; x++)
-            {
-                outptr[x] = v;
-            }
-            if (src.w < 12)
-            {
-                for (; x < (left + src.w); x++)
+                int x = 0;
+                for (; x < w; x++)
                 {
-                    outptr[x] = ptr[x - left];
+                    outptr[x] = v;
+                }
+                outptr += w;
+            }
+            // fill center
+            for (; y < (top + src.h); y++)
+            {
+                int x = 0;
+                for (; x < left; x++)
+                {
+                    outptr[x] = v;
+                }
+                if (src.w < 12)
+                {
+                    for (; x < (left + src.w); x++)
+                    {
+                        outptr[x] = ptr[x - left];
+                    }
+                }
+                else
+                {
+                    memcpy(outptr + left, ptr, src.w * sizeof(float));
+                    x += src.w;
+                }
+                for (; x < w; x++)
+                {
+                    outptr[x] = v;
+                }
+                ptr += src.w;
+                outptr += w;
+            }
+            // fill bottom
+            for (; y < h; y++)
+            {
+                int x = 0;
+                for (; x < w; x++)
+                {
+                    outptr[x] = v;
+                }
+                outptr += w;
+            }
+        }
+        else if (type == BORDER_REPLICATE)
+        {
+            int y = 0;
+            // fill top
+            for (; y < top; y++)
+            {
+                int x = 0;
+                for (; x < left; x++)
+                {
+                    outptr[x] = ptr[0];
+                }
+                if(src.w < 12)
+                {
+                    for (; x < (left + src.w); x++)
+                    {
+                        outptr[x] = ptr[x - left];
+                    }
+                }
+                else
+                {
+                    memcpy(outptr + left, ptr, src.w * sizeof(float));
+                    x += src.w;
+                }
+                for (; x < w; x++)
+                {
+                    outptr[x] = ptr[src.w - 1];
+                }
+                outptr += w;
+            }
+            // fill center
+            for (; y < (top + src.h); y++)
+            {
+                int x = 0;
+                for (; x < left; x++)
+                {
+                    outptr[x] = ptr[0];
+                }
+                if(src.w < 12)
+                {
+                    for (; x < (left + src.w); x++)
+                    {
+                        outptr[x] = ptr[x - left];
+                    }
+                }
+                else
+                {
+                    memcpy(outptr + left, ptr, src.w * sizeof(float));
+                    x += src.w;
+                }
+                for (; x < w; x++)
+                {
+                    outptr[x] = ptr[src.w - 1];
+                }
+                ptr += src.w;
+                outptr += w;
+            }
+            // fill bottom
+            ptr -= src.w;
+            for (; y < h; y++)
+            {
+                int x = 0;
+                for (; x < left; x++)
+                {
+                    outptr[x] = ptr[0];
+                }
+                if(src.w < 12)
+                {
+                    for (; x < (left + src.w); x++)
+                    {
+                        outptr[x] = ptr[x - left];
+                    }
+                }
+                else
+                {
+                    memcpy(outptr + left, ptr, src.w * sizeof(float));
+                    x += src.w;
+                }
+                for (; x < w; x++)
+                {
+                    outptr[x] = ptr[src.w - 1];
+                }
+                outptr += w;
+            }
+        }
+    }
+
+    void copy_make_border(const Mat& src, Mat& dst, int top, int bottom, int left, int right, int type, float v, Allocator* allocator, int num_threads)
+    {
+        int w = src.w + left + right;
+        int h = src.h + top + bottom;
+        size_t elemsize = src.elemsize;
+
+        if (w == src.w && h == src.h)
+        {
+            dst = src;
+            return;
+        }
+
+        if (src.dims == 2)
+        {
+            dst.create(w, h, elemsize, allocator);
+            if (dst.empty())
+                return;
+
+            copy_make_border_image(src, dst, top, left, type, v);
+        }
+        else if (src.dims == 3)
+        {
+            int channels = src.c;
+
+            dst.create(w, h, channels, elemsize, allocator);
+            if (dst.empty())
+                return;
+
+            // unroll image channel
+#pragma omp parallel for num_threads(num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    const Mat m = src.channel(q);
+                    Mat borderm = dst.channel(q);
+
+                    copy_make_border_image(m, borderm, top, left, type, v);
+#if __APPLE__
+                });
+#endif
+            }
+        }
+    }
+
+    static void copy_cut_border_image(const Mat& src, Mat& dst, int top, int left)
+    {
+        int w = dst.w;
+        int h = dst.h;
+
+        const float* ptr = src.row(top) + left;//.data + src.w * top + left;
+        float* outptr = dst;//.data;
+
+        for (int y = 0; y < h; y++)
+        {
+            if(w < 12)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    outptr[x] = ptr[x];
                 }
             }
             else
             {
-                memcpy(outptr + left, ptr, src.w * sizeof(float));
-                x += src.w;
+                memcpy(outptr, ptr, w*sizeof(float));
             }
-            for (; x < w; x++)
-            {
-                outptr[x] = v;
-            }
+            outptr += w;
             ptr += src.w;
-            outptr += w;
-        }
-        // fill bottom
-        for (; y < h; y++)
-        {
-            int x = 0;
-            for (; x < w; x++)
-            {
-                outptr[x] = v;
-            }
-            outptr += w;
         }
     }
-    else if (type == BORDER_REPLICATE)
-    {
-        int y = 0;
-        // fill top
-        for (; y < top; y++)
-        {
-            int x = 0;
-            for (; x < left; x++)
-            {
-                outptr[x] = ptr[0];
-            }
-            if(src.w < 12)
-            {
-                for (; x < (left + src.w); x++)
-                {
-                    outptr[x] = ptr[x - left];
-                }
-            }
-            else
-            {
-                memcpy(outptr + left, ptr, src.w * sizeof(float));
-                x += src.w;
-            }
-            for (; x < w; x++)
-            {
-                outptr[x] = ptr[src.w - 1];
-            }
-            outptr += w;
-        }
-        // fill center
-        for (; y < (top + src.h); y++)
-        {
-            int x = 0;
-            for (; x < left; x++)
-            {
-                outptr[x] = ptr[0];
-            }
-            if(src.w < 12)
-            {
-                for (; x < (left + src.w); x++)
-                {
-                    outptr[x] = ptr[x - left];
-                }
-            }
-            else
-            {
-                memcpy(outptr + left, ptr, src.w * sizeof(float));
-                x += src.w;
-            }
-            for (; x < w; x++)
-            {
-                outptr[x] = ptr[src.w - 1];
-            }
-            ptr += src.w;
-            outptr += w;
-        }
-        // fill bottom
-        ptr -= src.w;
-        for (; y < h; y++)
-        {
-            int x = 0;
-            for (; x < left; x++)
-            {
-                outptr[x] = ptr[0];
-            }
-            if(src.w < 12)
-            {
-                for (; x < (left + src.w); x++)
-                {
-                    outptr[x] = ptr[x - left];
-                }
-            }
-            else
-            {
-                memcpy(outptr + left, ptr, src.w * sizeof(float));
-                x += src.w;
-            }
-            for (; x < w; x++)
-            {
-                outptr[x] = ptr[src.w - 1];
-            }
-            outptr += w;
-        }
-    }
-}
 
-void copy_make_border(const Mat& src, Mat& dst, int top, int bottom, int left, int right, int type, float v, Allocator* allocator, int num_threads)
-{
-    int w = src.w + left + right;
-    int h = src.h + top + bottom;
-    size_t elemsize = src.elemsize;
-
-    if (w == src.w && h == src.h)
+    void copy_cut_border(const Mat& src, Mat& dst, int top, int bottom, int left, int right, Allocator* allocator, int num_threads)
     {
-        dst = src;
-        return;
-    }
+        int w = src.w - left - right;
+        int h = src.h - top - bottom;
+        size_t elemsize = src.elemsize;
 
-    if (src.dims == 2)
-    {
-        dst.create(w, h, elemsize, allocator);
-        if (dst.empty())
+        if (w == src.w && h == src.h)
+        {
+            dst = src;
             return;
-
-        copy_make_border_image(src, dst, top, left, type, v);
-    }
-    else if (src.dims == 3)
-    {
-        int channels = src.c;
-
-        dst.create(w, h, channels, elemsize, allocator);
-        if (dst.empty())
-            return;
-
-        // unroll image channel
-        #pragma omp parallel for num_threads(num_threads)
-        for (int q=0; q<channels; q++)
-        {
-            const Mat m = src.channel(q);
-            Mat borderm = dst.channel(q);
-
-            copy_make_border_image(m, borderm, top, left, type, v);
         }
-    }
-}
 
-static void copy_cut_border_image(const Mat& src, Mat& dst, int top, int left)
-{
-    int w = dst.w;
-    int h = dst.h;
-
-    const float* ptr = src.row(top) + left;//.data + src.w * top + left;
-    float* outptr = dst;//.data;
-
-    for (int y = 0; y < h; y++)
-    {
-        if(w < 12)
+        if (src.dims == 2)
         {
-            for (int x = 0; x < w; x++)
+            dst.create(w, h, elemsize, allocator);
+            if (dst.empty())
+                return;
+
+            copy_cut_border_image(src, dst, top, left);
+        }
+        else if (src.dims == 3)
+        {
+            int channels = src.c;
+
+            dst.create(w, h, channels, elemsize, allocator);
+            if (dst.empty())
+                return;
+
+            // unroll image channel
+#pragma omp parallel for num_threads(num_threads)
+            for (int q=0; q<channels; q++)
             {
-                outptr[x] = ptr[x];
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    const Mat m = src.channel(q);
+                    Mat cutm = dst.channel(q);
+
+                    copy_cut_border_image(m, cutm, top, left);
+#if __APPLE__
+                });
+#endif
             }
         }
-        else
-        {
-            memcpy(outptr, ptr, w*sizeof(float));
-        }
-        outptr += w;
-        ptr += src.w;
-    }
-}
-
-void copy_cut_border(const Mat& src, Mat& dst, int top, int bottom, int left, int right, Allocator* allocator, int num_threads)
-{
-    int w = src.w - left - right;
-    int h = src.h - top - bottom;
-    size_t elemsize = src.elemsize;
-
-    if (w == src.w && h == src.h)
-    {
-        dst = src;
-        return;
     }
 
-    if (src.dims == 2)
+    static void resize_bilinear_image(const Mat& src, Mat& dst, int w, int h)
     {
-        dst.create(w, h, elemsize, allocator);
-        if (dst.empty())
-            return;
+        double scale_x = (double)src.w / w;
+        double scale_y = (double)src.h / h;
 
-        copy_cut_border_image(src, dst, top, left);
-    }
-    else if (src.dims == 3)
-    {
-        int channels = src.c;
+        int* buf = new int[w + h + w*2 + h*2];
 
-        dst.create(w, h, channels, elemsize, allocator);
-        if (dst.empty())
-            return;
+        int* xofs = buf;//new int[w];
+        int* yofs = buf + w;//new int[h];
 
-        // unroll image channel
-        #pragma omp parallel for num_threads(num_threads)
-        for (int q=0; q<channels; q++)
+        float* alpha = (float*)(buf + w + h);//new float[w * 2];
+        float* beta = (float*)(buf + w + h + w*2);//new float[h * 2];
+
+        float fx;
+        float fy;
+        int sx;
+        int sy;
+
+        for (int dx = 0; dx < w; dx++)
         {
-            const Mat m = src.channel(q);
-            Mat cutm = dst.channel(q);
+            fx = (float)((dx + 0.5) * scale_x - 0.5);
+            sx = floor(fx);
+            fx -= sx;
 
-            copy_cut_border_image(m, cutm, top, left);
-        }
-    }
-}
+            if (sx < 0)
+            {
+                sx = 0;
+                fx = 0.f;
+            }
+            if (sx >= src.w - 1)
+            {
+                sx = src.w - 2;
+                fx = 1.f;
+            }
 
-static void resize_bilinear_image(const Mat& src, Mat& dst, int w, int h)
-{
-    double scale_x = (double)src.w / w;
-    double scale_y = (double)src.h / h;
+            xofs[dx] = sx;
 
-    int* buf = new int[w + h + w*2 + h*2];
-
-    int* xofs = buf;//new int[w];
-    int* yofs = buf + w;//new int[h];
-
-    float* alpha = (float*)(buf + w + h);//new float[w * 2];
-    float* beta = (float*)(buf + w + h + w*2);//new float[h * 2];
-
-    float fx;
-    float fy;
-    int sx;
-    int sy;
-
-    for (int dx = 0; dx < w; dx++)
-    {
-        fx = (float)((dx + 0.5) * scale_x - 0.5);
-        sx = floor(fx);
-        fx -= sx;
-
-        if (sx < 0)
-        {
-            sx = 0;
-            fx = 0.f;
-        }
-        if (sx >= src.w - 1)
-        {
-            sx = src.w - 2;
-            fx = 1.f;
+            alpha[dx*2    ] = 1.f - fx;
+            alpha[dx*2 + 1] = fx;
         }
 
-        xofs[dx] = sx;
-
-        alpha[dx*2    ] = 1.f - fx;
-        alpha[dx*2 + 1] = fx;
-    }
-
-    for (int dy = 0; dy < h; dy++)
-    {
-        fy = (float)((dy + 0.5) * scale_y - 0.5);
-        sy = floor(fy);
-        fy -= sy;
-
-        if (sy < 0)
+        for (int dy = 0; dy < h; dy++)
         {
-            sy = 0;
-            fy = 0.f;
+            fy = (float)((dy + 0.5) * scale_y - 0.5);
+            sy = floor(fy);
+            fy -= sy;
+
+            if (sy < 0)
+            {
+                sy = 0;
+                fy = 0.f;
+            }
+            if (sy >= src.h - 1)
+            {
+                sy = src.h - 2;
+                fy = 1.f;
+            }
+
+            yofs[dy] = sy;
+
+            beta[dy*2    ] = 1.f - fy;
+            beta[dy*2 + 1] = fy;
         }
-        if (sy >= src.h - 1)
+
+        // loop body
+        Mat rowsbuf0(w + 1);
+        Mat rowsbuf1(w + 1);
+        float* rows0 = rowsbuf0;
+        float* rows1 = rowsbuf1;
+
+        int prev_sy1 = -1;
+
+        for (int dy = 0; dy < h; dy++ )
         {
-            sy = src.h - 2;
-            fy = 1.f;
-        }
+            int sy = yofs[dy];
 
-        yofs[dy] = sy;
+            if (sy == prev_sy1)
+            {
+                // hresize one row
+                float* rows0_old = rows0;
+                rows0 = rows1;
+                rows1 = rows0_old;
+                const float* S1 = src.row(sy+1);
 
-        beta[dy*2    ] = 1.f - fy;
-        beta[dy*2 + 1] = fy;
-    }
-
-    // loop body
-    Mat rowsbuf0(w + 1);
-    Mat rowsbuf1(w + 1);
-    float* rows0 = rowsbuf0;
-    float* rows1 = rowsbuf1;
-
-    int prev_sy1 = -1;
-
-    for (int dy = 0; dy < h; dy++ )
-    {
-        int sy = yofs[dy];
-
-        if (sy == prev_sy1)
-        {
-            // hresize one row
-            float* rows0_old = rows0;
-            rows0 = rows1;
-            rows1 = rows0_old;
-            const float* S1 = src.row(sy+1);
-
-            const float* alphap = alpha;
-            float* rows1p = rows1;
-            int dx = 0;
+                const float* alphap = alpha;
+                float* rows1p = rows1;
+                int dx = 0;
 #if __ARM_NEON
-            for ( ; dx+1 < w; dx += 2 )
+                for ( ; dx+1 < w; dx += 2 )
             {
                 int sx = xofs[dx];
                 int sxn = xofs[dx+1];
@@ -713,30 +743,30 @@ static void resize_bilinear_image(const Mat& src, Mat& dst, int w, int h)
                 alphap += 4;
             }
 #endif // __ARM_NEON
-            for ( ; dx < w; dx++ )
-            {
-                int sx = xofs[dx];
-                const float* S1p = S1 + sx;
+                for ( ; dx < w; dx++ )
+                {
+                    int sx = xofs[dx];
+                    const float* S1p = S1 + sx;
 
-                float a0 = alphap[0];
-                float a1 = alphap[1];
-                rows1p[dx] = S1p[0]*a0 + S1p[1]*a1;
+                    float a0 = alphap[0];
+                    float a1 = alphap[1];
+                    rows1p[dx] = S1p[0]*a0 + S1p[1]*a1;
 
-                alphap += 2;
+                    alphap += 2;
+                }
             }
-        }
-        else
-        {
-            // hresize two rows
-            const float* S0 = src.row(sy);
-            const float* S1 = src.row(sy+1);
+            else
+            {
+                // hresize two rows
+                const float* S0 = src.row(sy);
+                const float* S1 = src.row(sy+1);
 
-            const float* alphap = alpha;
-            float* rows0p = rows0;
-            float* rows1p = rows1;
-            int dx = 0;
+                const float* alphap = alpha;
+                float* rows0p = rows0;
+                float* rows1p = rows1;
+                int dx = 0;
 #if __ARM_NEON
-            for ( ; dx+1 < w; dx += 2 )
+                for ( ; dx+1 < w; dx += 2 )
             {
                 int sx = xofs[dx];
                 int sxn = xofs[dx+1];
@@ -764,40 +794,40 @@ static void resize_bilinear_image(const Mat& src, Mat& dst, int w, int h)
                 alphap += 4;
             }
 #endif // __ARM_NEON
-            for ( ; dx < w; dx++ )
-            {
-                int sx = xofs[dx];
-                const float* S0p = S0 + sx;
-                const float* S1p = S1 + sx;
+                for ( ; dx < w; dx++ )
+                {
+                    int sx = xofs[dx];
+                    const float* S0p = S0 + sx;
+                    const float* S1p = S1 + sx;
 
-                float a0 = alphap[0];
-                float a1 = alphap[1];
-                rows0p[dx] = S0p[0]*a0 + S0p[1]*a1;
-                rows1p[dx] = S1p[0]*a0 + S1p[1]*a1;
+                    float a0 = alphap[0];
+                    float a1 = alphap[1];
+                    rows0p[dx] = S0p[0]*a0 + S0p[1]*a1;
+                    rows1p[dx] = S1p[0]*a0 + S1p[1]*a1;
 
-                alphap += 2;
+                    alphap += 2;
+                }
             }
-        }
 
-        prev_sy1 = sy + 1;
+            prev_sy1 = sy + 1;
 
-        // vresize
-        float b0 = beta[0];
-        float b1 = beta[1];
+            // vresize
+            float b0 = beta[0];
+            float b1 = beta[1];
 
-        float* rows0p = rows0;
-        float* rows1p = rows1;
-        float* Dp = dst.row(dy);
+            float* rows0p = rows0;
+            float* rows1p = rows1;
+            float* Dp = dst.row(dy);
 
 #if __ARM_NEON
-        int nn = w >> 3;
+            int nn = w >> 3;
 #else
-        int nn = 0;
+            int nn = 0;
 #endif
-        int remain = w - (nn << 3);
+            int remain = w - (nn << 3);
 
 #if __ARM_NEON
-        float32x4_t _b0 = vdupq_n_f32(b0);
+            float32x4_t _b0 = vdupq_n_f32(b0);
         float32x4_t _b1 = vdupq_n_f32(b1);
         for (; nn>0; nn--)
         {
@@ -822,54 +852,60 @@ static void resize_bilinear_image(const Mat& src, Mat& dst, int w, int h)
             rows1p += 8;
         }
 #endif // __ARM_NEON
-        for ( ; remain; --remain )
-        {
+            for ( ; remain; --remain )
+            {
 //             D[x] = rows0[x]*b0 + rows1[x]*b1;
-            *Dp++ = *rows0p++ * b0 + *rows1p++ * b1;
+                *Dp++ = *rows0p++ * b0 + *rows1p++ * b1;
+            }
+
+            beta += 2;
         }
 
-        beta += 2;
+        delete[] buf;
     }
 
-    delete[] buf;
-}
-
-void resize_bilinear(const Mat& src, Mat& dst, int w, int h, Allocator* allocator, int num_threads)
-{
-    if (w == src.w && h == src.h)
+    void resize_bilinear(const Mat& src, Mat& dst, int w, int h, Allocator* allocator, int num_threads)
     {
-        dst = src;
-        return;
-    }
-
-    size_t elemsize = src.elemsize;
-
-    if (src.dims == 2)
-    {
-        dst.create(w, h, elemsize, allocator);
-        if (dst.empty())
-            return;
-
-        resize_bilinear_image(src, dst, w, h);
-    }
-    else if (src.dims == 3)
-    {
-        int channels = src.c;
-
-        dst.create(w, h, channels, elemsize, allocator);
-        if (dst.empty())
-            return;
-
-        // unroll image channel
-        #pragma omp parallel for num_threads(num_threads)
-        for (int q=0; q<channels; q++)
+        if (w == src.w && h == src.h)
         {
-            const Mat m = src.channel(q);
-            Mat resizem = dst.channel(q);
+            dst = src;
+            return;
+        }
 
-            resize_bilinear_image(m, resizem, w, h);
+        size_t elemsize = src.elemsize;
+
+        if (src.dims == 2)
+        {
+            dst.create(w, h, elemsize, allocator);
+            if (dst.empty())
+                return;
+
+            resize_bilinear_image(src, dst, w, h);
+        }
+        else if (src.dims == 3)
+        {
+            int channels = src.c;
+
+            dst.create(w, h, channels, elemsize, allocator);
+            if (dst.empty())
+                return;
+
+            // unroll image channel
+#pragma omp parallel for num_threads(num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    const Mat m = src.channel(q);
+                    Mat resizem = dst.channel(q);
+
+                    resize_bilinear_image(m, resizem, w, h);
+#if __APPLE__
+                });
+#endif
+            }
         }
     }
-}
 
 } // namespace ncnn

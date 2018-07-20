@@ -17,60 +17,72 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Log)
+    DEFINE_LAYER_CREATOR(Log)
 
-Log::Log()
-{
-    one_blob_only = true;
-    support_inplace = true;
-}
-
-int Log::load_param(const ParamDict& pd)
-{
-    base = pd.get(0, -1.f);
-    scale = pd.get(1, 1.f);
-    shift = pd.get(2, 0.f);
-
-    return 0;
-}
-
-int Log::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    int size = w * h;
-
-    if (base == -1.f)
+    Log::Log()
     {
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
-            float* ptr = bottom_top_blob.channel(q);
-
-            for (int i=0; i<size; i++)
-            {
-                ptr[i] = log(shift + ptr[i] * scale);
-            }
-        }
-    }
-    else
-    {
-        float log_base_inv = 1.f / log(base);
-
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
-            float* ptr = bottom_top_blob.channel(q);
-
-            for (int i=0; i<size; i++)
-            {
-                ptr[i] = log(shift + ptr[i] * scale) * log_base_inv;
-            }
-        }
+        one_blob_only = true;
+        support_inplace = true;
     }
 
-    return 0;
-}
+    int Log::load_param(const ParamDict& pd)
+    {
+        base = pd.get(0, -1.f);
+        scale = pd.get(1, 1.f);
+        shift = pd.get(2, 0.f);
+
+        return 0;
+    }
+
+    int Log::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
+    {
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        int size = w * h;
+
+        if (base == -1.f)
+        {
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    float* ptr = bottom_top_blob.channel(q);
+
+                    for (int i=0; i<size; i++)
+                    {
+                        ptr[i] = log(shift + ptr[i] * scale);
+                    }
+#if __APPLE__
+                });
+#endif
+            }
+        }
+        else
+        {
+            float log_base_inv = 1.f / log(base);
+
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    float* ptr = bottom_top_blob.channel(q);
+
+                    for (int i=0; i<size; i++)
+                    {
+                        ptr[i] = log(shift + ptr[i] * scale) * log_base_inv;
+                    }
+#if __APPLE__
+                });
+#endif
+            }
+        }
+
+        return 0;
+    }
 
 } // namespace ncnn

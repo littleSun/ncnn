@@ -20,32 +20,35 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Bias_arm)
+    DEFINE_LAYER_CREATOR(Bias_arm)
 
-int Bias_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    int size = w * h;
-
-    const float* bias_ptr = bias_data;
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
+    int Bias_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
     {
-        float* ptr = bottom_top_blob.channel(q);
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        int size = w * h;
 
-        float bias = bias_ptr[q];
+        const float* bias_ptr = bias_data;
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int q=0; q<channels; q++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                float* ptr = bottom_top_blob.channel(q);
+
+                float bias = bias_ptr[q];
 
 #if __ARM_NEON
-        int nn = size >> 2;
+                int nn = size >> 2;
         int remain = size - (nn << 2);
 #else
-        int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-        float32x4_t _bias = vdupq_n_f32(bias);
+                float32x4_t _bias = vdupq_n_f32(bias);
         for (; nn>0; nn--)
         {
             float32x4_t _p = vld1q_f32(ptr);
@@ -56,15 +59,18 @@ int Bias_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
         }
 #endif // __ARM_NEON
 
-        for (; remain>0; remain--)
-        {
-            *ptr = *ptr + bias;
+                for (; remain>0; remain--)
+                {
+                    *ptr = *ptr + bias;
 
-            ptr++;
+                    ptr++;
+                }
+#if __APPLE__
+            });
+#endif
         }
-    }
 
-    return 0;
-}
+        return 0;
+    }
 
 } // namespace ncnn

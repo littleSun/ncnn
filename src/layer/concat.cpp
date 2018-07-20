@@ -123,16 +123,24 @@ int Concat::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_
         #pragma omp parallel for num_threads(opt.num_threads)
         for (int i=0; i<h; i++)
         {
-            float* outptr = top_blob.row(i);
-            for (size_t b=0; b<bottom_blobs.size(); b++)
-            {
-                const Mat& bottom_blob = bottom_blobs[b];
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                float* outptr = top_blob.row(i);
+                for (size_t b=0; b<bottom_blobs.size(); b++)
+                {
+                    const Mat& bottom_blob = bottom_blobs[b];
 
-                const float* ptr = bottom_blob.row(i);
-                memcpy(outptr, ptr, bottom_blob.w * elemsize);
+                    const float* ptr = bottom_blob.row(i);
+                    memcpy(outptr, ptr, bottom_blob.w * elemsize);
 
-                outptr += bottom_blob.w;
-            }
+                    outptr += bottom_blob.w;
+                }
+
+#if __APPLE__
+            });
+#endif
+
         }
 
         return 0;
@@ -197,19 +205,27 @@ int Concat::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_
         #pragma omp parallel for num_threads(opt.num_threads)
         for (int q=0; q<channels; q++)
         {
-            float* outptr = top_blob.channel(q);
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                float* outptr = top_blob.channel(q);
 
-            for (size_t b=0; b<bottom_blobs.size(); b++)
-            {
-                const Mat& bottom_blob = bottom_blobs[b];
+                for (size_t b=0; b<bottom_blobs.size(); b++)
+                {
+                    const Mat& bottom_blob = bottom_blobs[b];
 
-                int size = bottom_blob.w * bottom_blob.h;
+                    int size = bottom_blob.w * bottom_blob.h;
 
-                const float* ptr = bottom_blob.channel(q);
-                memcpy(outptr, ptr, size * elemsize);
+                    const float* ptr = bottom_blob.channel(q);
+                    memcpy(outptr, ptr, size * elemsize);
 
-                outptr += size;
-            }
+                    outptr += size;
+                }
+
+#if __APPLE__
+            });
+#endif
+
         }
 
         return 0;
@@ -237,20 +253,28 @@ int Concat::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_
         #pragma omp parallel for num_threads(opt.num_threads)
         for (int q=0; q<channels; q++)
         {
-            float* outptr = top_blob.channel(q);
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                float* outptr = top_blob.channel(q);
 
-            for (int i=0; i<h; i++)
-            {
-                for (size_t b=0; b<bottom_blobs.size(); b++)
+                for (int i=0; i<h; i++)
                 {
-                    const Mat& bottom_blob = bottom_blobs[b];
+                    for (size_t b=0; b<bottom_blobs.size(); b++)
+                    {
+                        const Mat& bottom_blob = bottom_blobs[b];
 
-                    const float* ptr = bottom_blob.channel(q).row(i);
-                    memcpy(outptr, ptr, bottom_blob.w * elemsize);
+                        const float* ptr = bottom_blob.channel(q).row(i);
+                        memcpy(outptr, ptr, bottom_blob.w * elemsize);
 
-                    outptr += bottom_blob.w;
+                        outptr += bottom_blob.w;
+                    }
                 }
-            }
+
+#if __APPLE__
+            });
+#endif
+
         }
 
         return 0;

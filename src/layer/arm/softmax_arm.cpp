@@ -23,56 +23,65 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Softmax_arm)
+    DEFINE_LAYER_CREATOR(Softmax_arm)
 
-int Softmax_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int dims = bottom_top_blob.dims;
-
-    if (dims != 3 || axis != 0)
-        return Softmax::forward_inplace(bottom_top_blob, opt);
-
-    // value = exp( value - global max value )
-    // sum all value
-    // value = value / sum
-
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    size_t elemsize = bottom_top_blob.elemsize;
-    int size = w * h;
-
-    Mat max;
-    max.create(w, h, elemsize, opt.workspace_allocator);
-    if (max.empty())
-        return -100;
-    max.fill(-FLT_MAX);
-    for (int q=0; q<channels; q++)
+    int Softmax_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
     {
-        float* ptr = bottom_top_blob.channel(q);
-        float* maxptr = max;
+        int dims = bottom_top_blob.dims;
 
-        for (int i=0; i<size; i++)
+        if (dims != 3 || axis != 0)
+            return Softmax::forward_inplace(bottom_top_blob, opt);
+
+        // value = exp( value - global max value )
+        // sum all value
+        // value = value / sum
+
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        size_t elemsize = bottom_top_blob.elemsize;
+        int size = w * h;
+
+#if __APPLE__
+        __block Mat max;
+#else
+        Mat max;
+#endif
+
+        max.create(w, h, elemsize, opt.workspace_allocator);
+        if (max.empty())
+            return -100;
+        max.fill(-FLT_MAX);
+        for (int q=0; q<channels; q++)
         {
-            maxptr[i] = std::max(maxptr[i], ptr[i]);
-        }
-    }
+            float* ptr = bottom_top_blob.channel(q);
+            float* maxptr = max;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
-    {
-        float* ptr = bottom_top_blob.channel(q);
-        float* maxptr = max;
+            for (int i=0; i<size; i++)
+            {
+                maxptr[i] = std::max(maxptr[i], ptr[i]);
+            }
+        }
+
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int q=0; q<channels; q++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+
+                float* ptr = bottom_top_blob.channel(q);
+                float* maxptr = max;
 
 #if __ARM_NEON
-        int nn = size >> 2;
+                int nn = size >> 2;
         int remain = size - (nn << 2);
 #else
-        int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-        for (; nn>0; nn--)
+                for (; nn>0; nn--)
         {
             float32x4_t _p = vld1q_f32(ptr);
             float32x4_t _max = vld1q_f32(maxptr);
@@ -86,34 +95,41 @@ int Softmax_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
         }
 #endif // __ARM_NEON
 
-        for (; remain>0; remain--)
-        {
-            *ptr = exp(*ptr - *maxptr);
+                for (; remain>0; remain--)
+                {
+                    *ptr = exp(*ptr - *maxptr);
 
-            ptr++;
-            maxptr++;
+                    ptr++;
+                    maxptr++;
+                }
+#if __APPLE__
+            });
+#endif
         }
-    }
 
-    Mat sum;
-    sum.create(w, h, elemsize, opt.workspace_allocator);
-    if (sum.empty())
-        return -100;
-    sum.fill(0.f);
-    for (int q=0; q<channels; q++)
-    {
-        float* ptr = bottom_top_blob.channel(q);
-        float* sumptr = sum;
+#if __APPLE__
+        __block Mat sum;
+#else
+        Mat sum;
+#endif
+        sum.create(w, h, elemsize, opt.workspace_allocator);
+        if (sum.empty())
+            return -100;
+        sum.fill(0.f);
+        for (int q=0; q<channels; q++)
+        {
+            float* ptr = bottom_top_blob.channel(q);
+            float* sumptr = sum;
 
 #if __ARM_NEON
-        int nn = size >> 2;
+            int nn = size >> 2;
         int remain = size - (nn << 2);
 #else
-        int remain = size;
+            int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-        for (; nn>0; nn--)
+            for (; nn>0; nn--)
         {
             float32x4_t _p = vld1q_f32(ptr);
             float32x4_t _sum = vld1q_f32(sumptr);
@@ -125,30 +141,34 @@ int Softmax_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
         }
 #endif // __ARM_NEON
 
-        for (; remain>0; remain--)
-        {
-            *sumptr += *ptr;
+            for (; remain>0; remain--)
+            {
+                *sumptr += *ptr;
 
-            ptr++;
-            sumptr++;
+                ptr++;
+                sumptr++;
+            }
         }
-    }
 
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
-    {
-        float* ptr = bottom_top_blob.channel(q);
-        float* sumptr = sum;
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int q=0; q<channels; q++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+
+                float* ptr = bottom_top_blob.channel(q);
+                float* sumptr = sum;
 
 #if __ARM_NEON
-        int nn = size >> 2;
+                int nn = size >> 2;
         int remain = size - (nn << 2);
 #else
-        int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-        for (; nn>0; nn--)
+                for (; nn>0; nn--)
         {
             float32x4_t _p = vld1q_f32(ptr);
             float32x4_t _sum = vld1q_f32(sumptr);
@@ -164,16 +184,19 @@ int Softmax_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
         }
 #endif // __ARM_NEON
 
-        for (; remain>0; remain--)
-        {
-            *ptr /= *sumptr;
+                for (; remain>0; remain--)
+                {
+                    *ptr /= *sumptr;
 
-            ptr++;
-            sumptr++;
+                    ptr++;
+                    sumptr++;
+                }
+#if __APPLE__
+            });
+#endif
         }
-    }
 
-    return 0;
-}
+        return 0;
+    }
 
 } // namespace ncnn

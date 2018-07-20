@@ -30,51 +30,54 @@ static void conv4x4s4_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     const float* kernel = _kernel;
     const float* bias = _bias;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int p=0; p<outch; p++)
     {
-        Mat out = top_blob.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            Mat out = top_blob.channel(p);
 
-        const float bias0 = bias ? bias[p] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
 
-        out.fill(bias0);
+            out.fill(bias0);
 
-        for (int q=0; q<inch; q++)
-        {
-            float* outptr = out;
+            for (int q=0; q<inch; q++)
+            {
+                float* outptr = out;
 
-            const float* img0 = bottom_blob.channel(q);
+                const float* img0 = bottom_blob.channel(q);
 
-            const float* kernel0 = kernel + p*inch*16 + q*16;
+                const float* kernel0 = kernel + p*inch*16 + q*16;
 
-            const float* r0 = img0;
-            const float* r1 = img0 + w;
-            const float* r2 = img0 + w*2;
-            const float* r3 = img0 + w*3;
+                const float* r0 = img0;
+                const float* r1 = img0 + w;
+                const float* r2 = img0 + w*2;
+                const float* r3 = img0 + w*3;
 
 #if __ARM_NEON
-            float32x4_t _k0123 = vld1q_f32(kernel0);
+                float32x4_t _k0123 = vld1q_f32(kernel0);
             float32x4_t _k4567 = vld1q_f32(kernel0+4);
             float32x4_t _k891011 = vld1q_f32(kernel0+8);
             float32x4_t _k12131415 = vld1q_f32(kernel0+12);
 #else
-            const float* k0 = kernel0;
-            const float* k1 = kernel0 + 4;
-            const float* k2 = kernel0 + 8;
-            const float* k3 = kernel0 + 12;
+                const float* k0 = kernel0;
+                const float* k1 = kernel0 + 4;
+                const float* k2 = kernel0 + 8;
+                const float* k3 = kernel0 + 12;
 #endif // __ARM_NEON
 
-            for (int i = 0; i < outh; i++)
-            {
+                for (int i = 0; i < outh; i++)
+                {
 #if __ARM_NEON
-                int nn = outw >> 2;
+                    int nn = outw >> 2;
                 int remain = outw - (nn << 2);
 #else
-                int remain = outw;
+                    int remain = outw;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
                 if (nn > 0)
                 {
                 asm volatile(
@@ -287,10 +290,10 @@ static void conv4x4s4_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
+                    for (; remain>0; remain--)
+                    {
 #if __ARM_NEON
-#if __aarch64__
+                        #if __aarch64__
                     float sum = 0.f;
 
                     asm volatile(
@@ -366,45 +369,48 @@ static void conv4x4s4_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                     *outptr += sum;
 #endif // __aarch64__
 #else
-                    float sum = 0;
+                        float sum = 0;
 
-                    sum += r0[0] * k0[0];
-                    sum += r0[1] * k0[1];
-                    sum += r0[2] * k0[2];
-                    sum += r0[3] * k0[3];
+                        sum += r0[0] * k0[0];
+                        sum += r0[1] * k0[1];
+                        sum += r0[2] * k0[2];
+                        sum += r0[3] * k0[3];
 
-                    sum += r1[0] * k1[0];
-                    sum += r1[1] * k1[1];
-                    sum += r1[2] * k1[2];
-                    sum += r1[3] * k1[3];
+                        sum += r1[0] * k1[0];
+                        sum += r1[1] * k1[1];
+                        sum += r1[2] * k1[2];
+                        sum += r1[3] * k1[3];
 
-                    sum += r2[0] * k2[0];
-                    sum += r2[1] * k2[1];
-                    sum += r2[2] * k2[2];
-                    sum += r2[3] * k2[3];
+                        sum += r2[0] * k2[0];
+                        sum += r2[1] * k2[1];
+                        sum += r2[2] * k2[2];
+                        sum += r2[3] * k2[3];
 
-                    sum += r3[0] * k3[0];
-                    sum += r3[1] * k3[1];
-                    sum += r3[2] * k3[2];
-                    sum += r3[3] * k3[3];
+                        sum += r3[0] * k3[0];
+                        sum += r3[1] * k3[1];
+                        sum += r3[2] * k3[2];
+                        sum += r3[3] * k3[3];
 
-                    *outptr += sum;
+                        *outptr += sum;
 
-                    r0 += 4;
-                    r1 += 4;
-                    r2 += 4;
-                    r3 += 4;
+                        r0 += 4;
+                        r1 += 4;
+                        r2 += 4;
+                        r3 += 4;
 #endif // __ARM_NEON
-                    outptr++;
+                        outptr++;
+                    }
+
+                    r0 += tailstep;
+                    r1 += tailstep;
+                    r2 += tailstep;
+                    r3 += tailstep;
                 }
 
-                r0 += tailstep;
-                r1 += tailstep;
-                r2 += tailstep;
-                r3 += tailstep;
             }
-
-        }
+#if __APPLE__
+        });
+#endif
     }
 
 }

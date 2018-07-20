@@ -115,36 +115,44 @@ int Deconvolution::forward(const Mat& bottom_blob, Mat& top_blob, const Option& 
     #pragma omp parallel for num_threads(opt.num_threads)
     for (int p=0; p<num_output; p++)
     {
-        Mat out = top_blob_bordered.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            Mat out = top_blob_bordered.channel(p);
 
-        const float bias = bias_term ? bias_data[p] : 0.f;
+            const float bias = bias_term ? bias_data[p] : 0.f;
 
-        out.fill(bias);
+            out.fill(bias);
 
-        for (int i = 0; i < h; i++)
-        {
-            for (int j = 0; j < w; j++)
+            for (int i = 0; i < h; i++)
             {
-                float* outptr = out.row(i*stride_h) + j*stride_w;
-
-                const float* kptr = (const float*)weight_data + maxk * channels * p;
-
-                // channels
-                for (int q=0; q<channels; q++)
+                for (int j = 0; j < w; j++)
                 {
-                    const Mat m = bottom_blob.channel(q);
-                    float val = *(m.row(i) + j);
+                    float* outptr = out.row(i*stride_h) + j*stride_w;
 
-                    for (int k = 0; k < maxk; k++)
+                    const float* kptr = (const float*)weight_data + maxk * channels * p;
+
+                    // channels
+                    for (int q=0; q<channels; q++)
                     {
-                        float w = kptr[k];
-                        outptr[ space_ofs[k] ] += val * w;
-                    }
+                        const Mat m = bottom_blob.channel(q);
+                        float val = *(m.row(i) + j);
 
-                    kptr += maxk;
+                        for (int k = 0; k < maxk; k++)
+                        {
+                            float w = kptr[k];
+                            outptr[ space_ofs[k] ] += val * w;
+                        }
+
+                        kptr += maxk;
+                    }
                 }
             }
-        }
+
+#if __APPLE__
+        });
+#endif
+
     }
 
     if (pad_w > 0 || pad_h > 0)

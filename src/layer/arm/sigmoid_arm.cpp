@@ -23,29 +23,32 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Sigmoid_arm)
+    DEFINE_LAYER_CREATOR(Sigmoid_arm)
 
-int Sigmoid_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    int size = w * h;
-
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
+    int Sigmoid_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
     {
-        float* ptr = bottom_top_blob.channel(q);
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        int size = w * h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int q=0; q<channels; q++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                float* ptr = bottom_top_blob.channel(q);
 
 #if __ARM_NEON
-        int nn = size >> 2;
+                int nn = size >> 2;
         int remain = size - (nn << 2);
 #else
-        int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-        float32x4_t _one = vdupq_n_f32(1.f);
+                float32x4_t _one = vdupq_n_f32(1.f);
         for (; nn>0; nn--)
         {
             float32x4_t _p = vld1q_f32(ptr);
@@ -60,15 +63,18 @@ int Sigmoid_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
             ptr += 4;
         }
 #endif // __ARM_NEON
-        for (; remain>0; remain--)
-        {
-            *ptr = 1.f / (1.f + exp(-*ptr));
+                for (; remain>0; remain--)
+                {
+                    *ptr = 1.f / (1.f + exp(-*ptr));
 
-            ptr++;
+                    ptr++;
+                }
+#if __APPLE__
+            });
+#endif
         }
-    }
 
-    return 0;
-}
+        return 0;
+    }
 
 } // namespace ncnn

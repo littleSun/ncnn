@@ -28,7 +28,6 @@
 #endif
 
 #if __APPLE__
-#include "TargetConditionals.h"
 #if TARGET_OS_IPHONE
 #include <sys/types.h>
 #include <sys/sysctl.h>
@@ -41,7 +40,7 @@ namespace ncnn {
 
 #ifdef __ANDROID__
 
-// extract the ELF HW capabilities bitmap from /proc/self/auxv
+    // extract the ELF HW capabilities bitmap from /proc/self/auxv
 static unsigned int get_elf_hwcap_from_proc_self_auxv()
 {
     FILE* fp = fopen("/proc/self/auxv", "rb");
@@ -92,7 +91,7 @@ static unsigned int g_hwcaps = get_elf_hwcap_from_proc_self_auxv();
 #endif // __ANDROID__
 
 #if __IOS__
-static unsigned int get_hw_cpufamily()
+    static unsigned int get_hw_cpufamily()
 {
     unsigned int value = 0;
     size_t len = sizeof(value);
@@ -119,57 +118,66 @@ static cpu_subtype_t get_hw_cpusubtype()
 static unsigned int g_hw_cpufamily = get_hw_cpufamily();
 static cpu_type_t g_hw_cputype = get_hw_cputype();
 static cpu_subtype_t g_hw_cpusubtype = get_hw_cpusubtype();
+
+dispatch_queue_t get_gcd_serial() {
+  return dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+}
+
+dispatch_queue_t get_gcd_concurrent() {
+  return dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+}
+
 #endif // __IOS__
 
-int cpu_support_arm_neon()
-{
+    int cpu_support_arm_neon()
+    {
 #ifdef __ANDROID__
-#if __aarch64__
+      #if __aarch64__
     return g_hwcaps & HWCAP_ASIMD;
 #else
     return g_hwcaps & HWCAP_NEON;
 #endif
 #elif __IOS__
-#if __aarch64__
+      #if __aarch64__
     return g_hw_cputype == CPU_TYPE_ARM64;
 #else
     return g_hw_cputype == CPU_TYPE_ARM && g_hw_cpusubtype > CPU_SUBTYPE_ARM_V7;
 #endif
 #else
-    return 0;
+      return 0;
 #endif
-}
+    }
 
-int cpu_support_arm_vfpv4()
-{
+    int cpu_support_arm_vfpv4()
+    {
 #ifdef __ANDROID__
-#if __aarch64__
+      #if __aarch64__
     // neon always enable fma and fp16
     return g_hwcaps & HWCAP_ASIMD;
 #else
     return g_hwcaps & HWCAP_VFPv4;
 #endif
 #elif __IOS__
-#if __aarch64__
+      #if __aarch64__
     return g_hw_cputype == CPU_TYPE_ARM64;
 #else
     return g_hw_cputype == CPU_TYPE_ARM && g_hw_cpusubtype > CPU_SUBTYPE_ARM_V7S;
 #endif
 #else
-    return 0;
+      return 0;
 #endif
-}
+    }
 
-int cpu_support_arm_asimdhp()
-{
+    int cpu_support_arm_asimdhp()
+    {
 #ifdef __ANDROID__
-#if __aarch64__
+      #if __aarch64__
     return g_hwcaps & HWCAP_ASIMDHP;
 #else
     return 0;
 #endif
 #elif __IOS__
-#if __aarch64__
+      #if __aarch64__
 #ifndef CPUFAMILY_ARM_HURRICANE
 #define CPUFAMILY_ARM_HURRICANE 0x67ceee93
 #endif
@@ -181,14 +189,14 @@ int cpu_support_arm_asimdhp()
     return 0;
 #endif
 #else
-    return 0;
+      return 0;
 #endif
-}
+    }
 
-static int get_cpucount()
-{
+    static int get_cpucount()
+    {
 #ifdef __ANDROID__
-    // get cpu count from /proc/cpuinfo
+      // get cpu count from /proc/cpuinfo
     FILE* fp = fopen("/proc/cpuinfo", "rb");
     if (!fp)
         return 1;
@@ -214,7 +222,7 @@ static int get_cpucount()
 
     return count;
 #elif __IOS__
-    int count = 0;
+      int count = 0;
     size_t len = sizeof(count);
     sysctlbyname("hw.ncpu", &count, &len, NULL, 0);
 
@@ -223,19 +231,19 @@ static int get_cpucount()
 
     return count;
 #else
-    return 1;
+      return 1;
 #endif
-}
+    }
 
-static int g_cpucount = get_cpucount();
+    static int g_cpucount = get_cpucount();
 
-int get_cpu_count()
-{
-    return g_cpucount;
-}
+    int get_cpu_count()
+    {
+      return g_cpucount;
+    }
 
 #ifdef __ANDROID__
-static int get_max_freq_khz(int cpuid)
+    static int get_max_freq_khz(int cpuid)
 {
     // first try, for all possible cpu
     char path[256];
@@ -381,17 +389,17 @@ static int sort_cpuid_by_max_frequency(std::vector<int>& cpuids, int* little_clu
 }
 #endif // __ANDROID__
 
-static int g_powersave = 0;
+    static int g_powersave = 0;
 
-int get_cpu_powersave()
-{
-    return g_powersave;
-}
+    int get_cpu_powersave()
+    {
+      return g_powersave;
+    }
 
-int set_cpu_powersave(int powersave)
-{
+    int set_cpu_powersave(int powersave)
+    {
 #ifdef __ANDROID__
-    static std::vector<int> sorted_cpuids;
+      static std::vector<int> sorted_cpuids;
     static int little_cluster_offset = 0;
 
     if (sorted_cpuids.empty())
@@ -462,49 +470,49 @@ int set_cpu_powersave(int powersave)
 
     return 0;
 #elif __IOS__
-    // thread affinity not supported on ios
+      // thread affinity not supported on ios
     return -1;
 #else
-    // TODO
-    (void) powersave;  // Avoid unused parameter warning.
-    return -1;
+      // TODO
+      (void) powersave;  // Avoid unused parameter warning.
+      return -1;
 #endif
-}
+    }
 
-int get_omp_num_threads()
-{
+    int get_omp_num_threads()
+    {
 #ifdef _OPENMP
-    return omp_get_num_threads();
+      return omp_get_num_threads();
 #else
-    return 1;
+      return 1;
 #endif
-}
+    }
 
-void set_omp_num_threads(int num_threads)
-{
+    void set_omp_num_threads(int num_threads)
+    {
 #ifdef _OPENMP
-    omp_set_num_threads(num_threads);
+      omp_set_num_threads(num_threads);
 #else
-    (void)num_threads;
+      (void)num_threads;
 #endif
-}
+    }
 
-int get_omp_dynamic()
-{
+    int get_omp_dynamic()
+    {
 #ifdef _OPENMP
-    return omp_get_dynamic();
+      return omp_get_dynamic();
 #else
-    return 0;
+      return 0;
 #endif
-}
+    }
 
-void set_omp_dynamic(int dynamic)
-{
+    void set_omp_dynamic(int dynamic)
+    {
 #ifdef _OPENMP
-    omp_set_dynamic(dynamic);
+      omp_set_dynamic(dynamic);
 #else
-    (void)dynamic;
+      (void)dynamic;
 #endif
-}
+    }
 
 } // namespace ncnn

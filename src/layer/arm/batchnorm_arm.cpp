@@ -20,41 +20,44 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(BatchNorm_arm)
+    DEFINE_LAYER_CREATOR(BatchNorm_arm)
 
-int BatchNorm_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int dims = bottom_top_blob.dims;
-    if (dims != 3)
-        return BatchNorm::forward_inplace(bottom_top_blob, opt);
-
-    // a = bias - slope * mean / sqrt(var)
-    // b = slope / sqrt(var)
-    // value = b * value + a
-
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int size = w * h;
-
-    const float* a_data_ptr = a_data;
-    const float* b_data_ptr = b_data;
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
+    int BatchNorm_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
     {
-        float* ptr = bottom_top_blob.channel(q);
+        int dims = bottom_top_blob.dims;
+        if (dims != 3)
+            return BatchNorm::forward_inplace(bottom_top_blob, opt);
 
-        float a = a_data_ptr[q];
-        float b = b_data_ptr[q];
+        // a = bias - slope * mean / sqrt(var)
+        // b = slope / sqrt(var)
+        // value = b * value + a
+
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int size = w * h;
+
+        const float* a_data_ptr = a_data;
+        const float* b_data_ptr = b_data;
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int q=0; q<channels; q++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                float* ptr = bottom_top_blob.channel(q);
+
+                float a = a_data_ptr[q];
+                float b = b_data_ptr[q];
 
 #if __ARM_NEON
-        int nn = size >> 2;
+                int nn = size >> 2;
         int remain = size - (nn << 2);
 #else
-        int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                #if __aarch64__
         if (nn > 0)
         {
         asm volatile(
@@ -102,15 +105,18 @@ int BatchNorm_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) cons
         }
 #endif // __aarch64__
 #endif // __ARM_NEON
-        for (; remain>0; remain--)
-        {
-            *ptr = b * *ptr + a;
+                for (; remain>0; remain--)
+                {
+                    *ptr = b * *ptr + a;
 
-            ptr++;
+                    ptr++;
+                }
+#if __APPLE__
+            });
+#endif
         }
-    }
 
-    return 0;
-}
+        return 0;
+    }
 
 } // namespace ncnn

@@ -17,33 +17,39 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Sigmoid)
+    DEFINE_LAYER_CREATOR(Sigmoid)
 
-Sigmoid::Sigmoid()
-{
-    one_blob_only = true;
-    support_inplace = true;
-}
-
-int Sigmoid::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    int size = w * h;
-
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
+    Sigmoid::Sigmoid()
     {
-        float* ptr = bottom_top_blob.channel(q);
-
-        for (int i=0; i<size; i++)
-        {
-            ptr[i] = 1.f / (1.f + exp(-ptr[i]));
-        }
+        one_blob_only = true;
+        support_inplace = true;
     }
 
-    return 0;
-}
+    int Sigmoid::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
+    {
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        int size = w * h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int q=0; q<channels; q++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                float* ptr = bottom_top_blob.channel(q);
+
+                for (int i=0; i<size; i++)
+                {
+                    ptr[i] = 1.f / (1.f + exp(-ptr[i]));
+                }
+#if __APPLE__
+            });
+#endif
+        }
+
+        return 0;
+    }
 
 } // namespace ncnn

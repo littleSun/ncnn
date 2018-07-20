@@ -28,48 +28,51 @@ static void deconv4x4s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _
     const float* kernel = _kernel;
     const float* bias = _bias;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int p=0; p<outch; p++)
     {
-        Mat out = top_blob.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            Mat out = top_blob.channel(p);
 
-        const float bias0 = bias ? bias[p] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
 
-        out.fill(bias0);
+            out.fill(bias0);
 
-        for (int q=0; q<inch; q++)
-        {
-            const float* img0 = bottom_blob.channel(q);
+            for (int q=0; q<inch; q++)
+            {
+                const float* img0 = bottom_blob.channel(q);
 
-            const float* kernel0 = kernel + p*inch*16 + q*16;
+                const float* kernel0 = kernel + p*inch*16 + q*16;
 
-            const float* r0 = img0;
+                const float* r0 = img0;
 
-            const float* k0 = kernel0;
-            const float* k1 = kernel0 + 4;
-            const float* k2 = kernel0 + 8;
-            const float* k3 = kernel0 + 12;
+                const float* k0 = kernel0;
+                const float* k1 = kernel0 + 4;
+                const float* k2 = kernel0 + 8;
+                const float* k3 = kernel0 + 12;
 
 #if __ARM_NEON
-            float32x4_t _k0 = vld1q_f32(k0);
+                float32x4_t _k0 = vld1q_f32(k0);
             float32x4_t _k1 = vld1q_f32(k1);
             float32x4_t _k2 = vld1q_f32(k2);
             float32x4_t _k3 = vld1q_f32(k3);
 #endif // __ARM_NEON
 
-            for (int i = 0; i < h; i++)
-            {
-                float* outptr = out.row(i);
+                for (int i = 0; i < h; i++)
+                {
+                    float* outptr = out.row(i);
 
-                float* outptr0 = outptr;
-                float* outptr1 = outptr0 + outw;
-                float* outptr2 = outptr1 + outw;
-                float* outptr3 = outptr2 + outw;
+                    float* outptr0 = outptr;
+                    float* outptr1 = outptr0 + outw;
+                    float* outptr2 = outptr1 + outw;
+                    float* outptr3 = outptr2 + outw;
 
-                int j = 0;
+                    int j = 0;
 
 #if __ARM_NEON
-                for (; j+3<w; j+=4)
+                    for (; j+3<w; j+=4)
                 {
                     float32x4_t _v = vld1q_f32(r0);
 
@@ -150,38 +153,41 @@ static void deconv4x4s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _
 
 #endif  // __ARM_NEON
 
-                for (; j < w; j++)
-                {
-                    float val = r0[0];
+                    for (; j < w; j++)
+                    {
+                        float val = r0[0];
 
-                    outptr0[0] += val * k0[0];
-                    outptr0[1] += val * k0[1];
-                    outptr0[2] += val * k0[2];
-                    outptr0[3] += val * k0[3];
+                        outptr0[0] += val * k0[0];
+                        outptr0[1] += val * k0[1];
+                        outptr0[2] += val * k0[2];
+                        outptr0[3] += val * k0[3];
 
-                    outptr1[0] += val * k1[0];
-                    outptr1[1] += val * k1[1];
-                    outptr1[2] += val * k1[2];
-                    outptr1[3] += val * k1[3];
+                        outptr1[0] += val * k1[0];
+                        outptr1[1] += val * k1[1];
+                        outptr1[2] += val * k1[2];
+                        outptr1[3] += val * k1[3];
 
-                    outptr2[0] += val * k2[0];
-                    outptr2[1] += val * k2[1];
-                    outptr2[2] += val * k2[2];
-                    outptr2[3] += val * k2[3];
+                        outptr2[0] += val * k2[0];
+                        outptr2[1] += val * k2[1];
+                        outptr2[2] += val * k2[2];
+                        outptr2[3] += val * k2[3];
 
-                    outptr3[0] += val * k3[0];
-                    outptr3[1] += val * k3[1];
-                    outptr3[2] += val * k3[2];
-                    outptr3[3] += val * k3[3];
+                        outptr3[0] += val * k3[0];
+                        outptr3[1] += val * k3[1];
+                        outptr3[2] += val * k3[2];
+                        outptr3[3] += val * k3[3];
 
-                    r0++;
-                    outptr0++;
-                    outptr1++;
-                    outptr2++;
-                    outptr3++;
+                        r0++;
+                        outptr0++;
+                        outptr1++;
+                        outptr2++;
+                        outptr3++;
+                    }
                 }
             }
-        }
+#if __APPLE__
+        });
+#endif
     }
 }
 
@@ -197,47 +203,51 @@ static void deconv4x4s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _
     const float* kernel = _kernel;
     const float* bias = _bias;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int p=0; p<outch; p++)
     {
-        Mat out = top_blob.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
 
-        const float bias0 = bias ? bias[p] : 0.f;
+            Mat out = top_blob.channel(p);
 
-        out.fill(bias0);
+            const float bias0 = bias ? bias[p] : 0.f;
 
-        for (int q=0; q<inch; q++)
-        {
-            const float* img0 = bottom_blob.channel(q);
+            out.fill(bias0);
 
-            const float* kernel0 = kernel + p*inch*16 + q*16;
+            for (int q=0; q<inch; q++)
+            {
+                const float* img0 = bottom_blob.channel(q);
 
-            const float* r0 = img0;
+                const float* kernel0 = kernel + p*inch*16 + q*16;
 
-            const float* k0 = kernel0;
-            const float* k1 = kernel0 + 4;
-            const float* k2 = kernel0 + 8;
-            const float* k3 = kernel0 + 12;
+                const float* r0 = img0;
+
+                const float* k0 = kernel0;
+                const float* k1 = kernel0 + 4;
+                const float* k2 = kernel0 + 8;
+                const float* k3 = kernel0 + 12;
 
 #if __ARM_NEON
-            float32x4_t _k0 = vld1q_f32(k0);
+                float32x4_t _k0 = vld1q_f32(k0);
             float32x4_t _k1 = vld1q_f32(k1);
             float32x4_t _k2 = vld1q_f32(k2);
             float32x4_t _k3 = vld1q_f32(k3);
 #endif // __ARM_NEON
 
-            for (int i = 0; i < h; i++)
-            {
-                float* outptr = out.row(i*2);
+                for (int i = 0; i < h; i++)
+                {
+                    float* outptr = out.row(i*2);
 
-                float* outptr0 = outptr;
-                float* outptr1 = outptr0 + outw;
-                float* outptr2 = outptr1 + outw;
-                float* outptr3 = outptr2 + outw;
+                    float* outptr0 = outptr;
+                    float* outptr1 = outptr0 + outw;
+                    float* outptr2 = outptr1 + outw;
+                    float* outptr3 = outptr2 + outw;
 
-                int j = 0;
+                    int j = 0;
 #if __ARM_NEON
-                for (; j+3<w; j+=4)
+                    for (; j+3<w; j+=4)
                 {
                     float32x4_t _v = vld1q_f32(r0);
 
@@ -302,38 +312,41 @@ static void deconv4x4s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _
 
 #endif // __ARM_NEON
 
-                for (; j < w; j++)
-                {
-                    float val = r0[0];
+                    for (; j < w; j++)
+                    {
+                        float val = r0[0];
 
-                    outptr0[0] += val * k0[0];
-                    outptr0[1] += val * k0[1];
-                    outptr0[2] += val * k0[2];
-                    outptr0[3] += val * k0[3];
+                        outptr0[0] += val * k0[0];
+                        outptr0[1] += val * k0[1];
+                        outptr0[2] += val * k0[2];
+                        outptr0[3] += val * k0[3];
 
-                    outptr1[0] += val * k1[0];
-                    outptr1[1] += val * k1[1];
-                    outptr1[2] += val * k1[2];
-                    outptr1[3] += val * k1[3];
+                        outptr1[0] += val * k1[0];
+                        outptr1[1] += val * k1[1];
+                        outptr1[2] += val * k1[2];
+                        outptr1[3] += val * k1[3];
 
-                    outptr2[0] += val * k2[0];
-                    outptr2[1] += val * k2[1];
-                    outptr2[2] += val * k2[2];
-                    outptr2[3] += val * k2[3];
+                        outptr2[0] += val * k2[0];
+                        outptr2[1] += val * k2[1];
+                        outptr2[2] += val * k2[2];
+                        outptr2[3] += val * k2[3];
 
-                    outptr3[0] += val * k3[0];
-                    outptr3[1] += val * k3[1];
-                    outptr3[2] += val * k3[2];
-                    outptr3[3] += val * k3[3];
+                        outptr3[0] += val * k3[0];
+                        outptr3[1] += val * k3[1];
+                        outptr3[2] += val * k3[2];
+                        outptr3[3] += val * k3[3];
 
-                    r0++;
-                    outptr0 += 2;
-                    outptr1 += 2;
-                    outptr2 += 2;
-                    outptr3 += 2;
+                        r0++;
+                        outptr0 += 2;
+                        outptr1 += 2;
+                        outptr2 += 2;
+                        outptr3 += 2;
+                    }
+
                 }
-
             }
-        }
+#if __APPLE__
+        });
+#endif
     }
 }

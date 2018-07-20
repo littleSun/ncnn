@@ -28,53 +28,56 @@ static void conv7x7s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     const float* kernel = _kernel;
     const float* bias = _bias;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int p=0; p<outch; p++)
     {
-        Mat out = top_blob.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            Mat out = top_blob.channel(p);
 
-        const float bias0 = bias ? bias[p] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
 
-        out.fill(bias0);
+            out.fill(bias0);
 
-        for (int q=0; q<inch; q++)
-        {
-            float* outptr = out;
-
-            const float* img0 = bottom_blob.channel(q);
-
-            const float* kernel0 = kernel + p*inch*49  + q*49;
-
-            const float* r0 = img0;
-            const float* r1 = img0 + w;
-            const float* r2 = img0 + w*2;
-            const float* r3 = img0 + w*3;
-            const float* r4 = img0 + w*4;
-            const float* r5 = img0 + w*5;
-            const float* r6 = img0 + w*6;
-
-            const float* k0 = kernel0;
-            const float* k1 = kernel0 + 7;
-            const float* k2 = kernel0 + 14;
-            const float* k3 = kernel0 + 21;
-            const float* k4 = kernel0 + 28;
-            const float* k5 = kernel0 + 35;
-            const float* k6 = kernel0 + 42;
-
-            int i = 0;
-
-            for (; i < outh; i++)
+            for (int q=0; q<inch; q++)
             {
+                float* outptr = out;
+
+                const float* img0 = bottom_blob.channel(q);
+
+                const float* kernel0 = kernel + p*inch*49  + q*49;
+
+                const float* r0 = img0;
+                const float* r1 = img0 + w;
+                const float* r2 = img0 + w*2;
+                const float* r3 = img0 + w*3;
+                const float* r4 = img0 + w*4;
+                const float* r5 = img0 + w*5;
+                const float* r6 = img0 + w*6;
+
+                const float* k0 = kernel0;
+                const float* k1 = kernel0 + 7;
+                const float* k2 = kernel0 + 14;
+                const float* k3 = kernel0 + 21;
+                const float* k4 = kernel0 + 28;
+                const float* k5 = kernel0 + 35;
+                const float* k6 = kernel0 + 42;
+
+                int i = 0;
+
+                for (; i < outh; i++)
+                {
 
 #if __ARM_NEON
-                int nn = outw >> 2;
+                    int nn = outw >> 2;
                 int remain = outw - (nn << 2);
 #else
-                int remain = outw;
+                    int remain = outw;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
                 float32x4_t _k0123 = vld1q_f32(k0);
                 float32x4_t _k4567 = vld1q_f32(k0 + 4);
                 float32x4_t _k78910 = vld1q_f32(k1);
@@ -619,89 +622,92 @@ static void conv7x7s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
 #endif // __aarch64__
 #endif // __ARM_NEON
 
-                for (; remain>0; remain--)
-                {
-                    float sum = 0;
+                    for (; remain>0; remain--)
+                    {
+                        float sum = 0;
 
-                    sum += r0[0] * k0[0];
-                    sum += r0[1] * k0[1];
-                    sum += r0[2] * k0[2];
-                    sum += r0[3] * k0[3];
-                    sum += r0[4] * k0[4];
-                    sum += r0[5] * k0[5];
-                    sum += r0[6] * k0[6];
+                        sum += r0[0] * k0[0];
+                        sum += r0[1] * k0[1];
+                        sum += r0[2] * k0[2];
+                        sum += r0[3] * k0[3];
+                        sum += r0[4] * k0[4];
+                        sum += r0[5] * k0[5];
+                        sum += r0[6] * k0[6];
 
-                    sum += r1[0] * k1[0];
-                    sum += r1[1] * k1[1];
-                    sum += r1[2] * k1[2];
-                    sum += r1[3] * k1[3];
-                    sum += r1[4] * k1[4];
-                    sum += r1[5] * k1[5];
-                    sum += r1[6] * k1[6];
+                        sum += r1[0] * k1[0];
+                        sum += r1[1] * k1[1];
+                        sum += r1[2] * k1[2];
+                        sum += r1[3] * k1[3];
+                        sum += r1[4] * k1[4];
+                        sum += r1[5] * k1[5];
+                        sum += r1[6] * k1[6];
 
-                    sum += r2[0] * k2[0];
-                    sum += r2[1] * k2[1];
-                    sum += r2[2] * k2[2];
-                    sum += r2[3] * k2[3];
-                    sum += r2[4] * k2[4];
-                    sum += r2[5] * k2[5];
-                    sum += r2[6] * k2[6];
+                        sum += r2[0] * k2[0];
+                        sum += r2[1] * k2[1];
+                        sum += r2[2] * k2[2];
+                        sum += r2[3] * k2[3];
+                        sum += r2[4] * k2[4];
+                        sum += r2[5] * k2[5];
+                        sum += r2[6] * k2[6];
 
-                    sum += r3[0] * k3[0];
-                    sum += r3[1] * k3[1];
-                    sum += r3[2] * k3[2];
-                    sum += r3[3] * k3[3];
-                    sum += r3[4] * k3[4];
-                    sum += r3[5] * k3[5];
-                    sum += r3[6] * k3[6];
+                        sum += r3[0] * k3[0];
+                        sum += r3[1] * k3[1];
+                        sum += r3[2] * k3[2];
+                        sum += r3[3] * k3[3];
+                        sum += r3[4] * k3[4];
+                        sum += r3[5] * k3[5];
+                        sum += r3[6] * k3[6];
 
-                    sum += r4[0] * k4[0];
-                    sum += r4[1] * k4[1];
-                    sum += r4[2] * k4[2];
-                    sum += r4[3] * k4[3];
-                    sum += r4[4] * k4[4];
-                    sum += r4[5] * k4[5];
-                    sum += r4[6] * k4[6];
+                        sum += r4[0] * k4[0];
+                        sum += r4[1] * k4[1];
+                        sum += r4[2] * k4[2];
+                        sum += r4[3] * k4[3];
+                        sum += r4[4] * k4[4];
+                        sum += r4[5] * k4[5];
+                        sum += r4[6] * k4[6];
 
-                    sum += r5[0] * k5[0];
-                    sum += r5[1] * k5[1];
-                    sum += r5[2] * k5[2];
-                    sum += r5[3] * k5[3];
-                    sum += r5[4] * k5[4];
-                    sum += r5[5] * k5[5];
-                    sum += r5[6] * k5[6];
+                        sum += r5[0] * k5[0];
+                        sum += r5[1] * k5[1];
+                        sum += r5[2] * k5[2];
+                        sum += r5[3] * k5[3];
+                        sum += r5[4] * k5[4];
+                        sum += r5[5] * k5[5];
+                        sum += r5[6] * k5[6];
 
-                    sum += r6[0] * k6[0];
-                    sum += r6[1] * k6[1];
-                    sum += r6[2] * k6[2];
-                    sum += r6[3] * k6[3];
-                    sum += r6[4] * k6[4];
-                    sum += r6[5] * k6[5];
-                    sum += r6[6] * k6[6];
+                        sum += r6[0] * k6[0];
+                        sum += r6[1] * k6[1];
+                        sum += r6[2] * k6[2];
+                        sum += r6[3] * k6[3];
+                        sum += r6[4] * k6[4];
+                        sum += r6[5] * k6[5];
+                        sum += r6[6] * k6[6];
 
-                    *outptr += sum;
+                        *outptr += sum;
 
-                    r0++;
-                    r1++;
-                    r2++;
-                    r3++;
-                    r4++;
-                    r5++;
-                    r6++;
-                    outptr++;
+                        r0++;
+                        r1++;
+                        r2++;
+                        r3++;
+                        r4++;
+                        r5++;
+                        r6++;
+                        outptr++;
+                    }
+
+                    r0 += 6;
+                    r1 += 6;
+                    r2 += 6;
+                    r3 += 6;
+                    r4 += 6;
+                    r5 += 6;
+                    r6 += 6;
+
                 }
 
-                r0 += 6;
-                r1 += 6;
-                r2 += 6;
-                r3 += 6;
-                r4 += 6;
-                r5 += 6;
-                r6 += 6;
-
             }
-
-        }
+#if __APPLE__
+        });
+#endif
     }
 
 }
@@ -720,53 +726,56 @@ static void conv7x7s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     const float* kernel = _kernel;
     const float* bias = _bias;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int p=0; p<outch; p++)
     {
-        Mat out = top_blob.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            Mat out = top_blob.channel(p);
 
-        const float bias0 = bias ? bias[p] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
 
-        out.fill(bias0);
+            out.fill(bias0);
 
-        for (int q=0; q<inch; q++)
-        {
-            float* outptr = out;
-
-            const float* img0 = bottom_blob.channel(q);
-
-            const float* kernel0 = kernel + p*inch*49  + q*49;
-
-            const float* r0 = img0;
-            const float* r1 = img0 + w;
-            const float* r2 = img0 + w*2;
-            const float* r3 = img0 + w*3;
-            const float* r4 = img0 + w*4;
-            const float* r5 = img0 + w*5;
-            const float* r6 = img0 + w*6;
-
-            const float* k0 = kernel0;
-            const float* k1 = kernel0 + 7;
-            const float* k2 = kernel0 + 14;
-            const float* k3 = kernel0 + 21;
-            const float* k4 = kernel0 + 28;
-            const float* k5 = kernel0 + 35;
-            const float* k6 = kernel0 + 42;
-
-            int i = 0;
-
-            for (; i < outh; i++)
+            for (int q=0; q<inch; q++)
             {
+                float* outptr = out;
+
+                const float* img0 = bottom_blob.channel(q);
+
+                const float* kernel0 = kernel + p*inch*49  + q*49;
+
+                const float* r0 = img0;
+                const float* r1 = img0 + w;
+                const float* r2 = img0 + w*2;
+                const float* r3 = img0 + w*3;
+                const float* r4 = img0 + w*4;
+                const float* r5 = img0 + w*5;
+                const float* r6 = img0 + w*6;
+
+                const float* k0 = kernel0;
+                const float* k1 = kernel0 + 7;
+                const float* k2 = kernel0 + 14;
+                const float* k3 = kernel0 + 21;
+                const float* k4 = kernel0 + 28;
+                const float* k5 = kernel0 + 35;
+                const float* k6 = kernel0 + 42;
+
+                int i = 0;
+
+                for (; i < outh; i++)
+                {
 
 #if __ARM_NEON
-                int nn = outw >> 2;
+                    int nn = outw >> 2;
                 int remain = outw - (nn << 2);
 #else
-                int remain = outw;
+                    int remain = outw;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
                 float32x4_t _k0123 = vld1q_f32(k0);
                 float32x4_t _k4567 = vld1q_f32(k0 + 4);
                 float32x4_t _k78910 = vld1q_f32(k1);
@@ -1323,89 +1332,92 @@ static void conv7x7s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
 #endif // __aarch64__
 #endif // __ARM_NEON
 
-                for (; remain>0; remain--)
-                {
-                    float sum = 0;
+                    for (; remain>0; remain--)
+                    {
+                        float sum = 0;
 
-                    sum += r0[0] * k0[0];
-                    sum += r0[1] * k0[1];
-                    sum += r0[2] * k0[2];
-                    sum += r0[3] * k0[3];
-                    sum += r0[4] * k0[4];
-                    sum += r0[5] * k0[5];
-                    sum += r0[6] * k0[6];
+                        sum += r0[0] * k0[0];
+                        sum += r0[1] * k0[1];
+                        sum += r0[2] * k0[2];
+                        sum += r0[3] * k0[3];
+                        sum += r0[4] * k0[4];
+                        sum += r0[5] * k0[5];
+                        sum += r0[6] * k0[6];
 
-                    sum += r1[0] * k1[0];
-                    sum += r1[1] * k1[1];
-                    sum += r1[2] * k1[2];
-                    sum += r1[3] * k1[3];
-                    sum += r1[4] * k1[4];
-                    sum += r1[5] * k1[5];
-                    sum += r1[6] * k1[6];
+                        sum += r1[0] * k1[0];
+                        sum += r1[1] * k1[1];
+                        sum += r1[2] * k1[2];
+                        sum += r1[3] * k1[3];
+                        sum += r1[4] * k1[4];
+                        sum += r1[5] * k1[5];
+                        sum += r1[6] * k1[6];
 
-                    sum += r2[0] * k2[0];
-                    sum += r2[1] * k2[1];
-                    sum += r2[2] * k2[2];
-                    sum += r2[3] * k2[3];
-                    sum += r2[4] * k2[4];
-                    sum += r2[5] * k2[5];
-                    sum += r2[6] * k2[6];
+                        sum += r2[0] * k2[0];
+                        sum += r2[1] * k2[1];
+                        sum += r2[2] * k2[2];
+                        sum += r2[3] * k2[3];
+                        sum += r2[4] * k2[4];
+                        sum += r2[5] * k2[5];
+                        sum += r2[6] * k2[6];
 
-                    sum += r3[0] * k3[0];
-                    sum += r3[1] * k3[1];
-                    sum += r3[2] * k3[2];
-                    sum += r3[3] * k3[3];
-                    sum += r3[4] * k3[4];
-                    sum += r3[5] * k3[5];
-                    sum += r3[6] * k3[6];
+                        sum += r3[0] * k3[0];
+                        sum += r3[1] * k3[1];
+                        sum += r3[2] * k3[2];
+                        sum += r3[3] * k3[3];
+                        sum += r3[4] * k3[4];
+                        sum += r3[5] * k3[5];
+                        sum += r3[6] * k3[6];
 
-                    sum += r4[0] * k4[0];
-                    sum += r4[1] * k4[1];
-                    sum += r4[2] * k4[2];
-                    sum += r4[3] * k4[3];
-                    sum += r4[4] * k4[4];
-                    sum += r4[5] * k4[5];
-                    sum += r4[6] * k4[6];
+                        sum += r4[0] * k4[0];
+                        sum += r4[1] * k4[1];
+                        sum += r4[2] * k4[2];
+                        sum += r4[3] * k4[3];
+                        sum += r4[4] * k4[4];
+                        sum += r4[5] * k4[5];
+                        sum += r4[6] * k4[6];
 
-                    sum += r5[0] * k5[0];
-                    sum += r5[1] * k5[1];
-                    sum += r5[2] * k5[2];
-                    sum += r5[3] * k5[3];
-                    sum += r5[4] * k5[4];
-                    sum += r5[5] * k5[5];
-                    sum += r5[6] * k5[6];
+                        sum += r5[0] * k5[0];
+                        sum += r5[1] * k5[1];
+                        sum += r5[2] * k5[2];
+                        sum += r5[3] * k5[3];
+                        sum += r5[4] * k5[4];
+                        sum += r5[5] * k5[5];
+                        sum += r5[6] * k5[6];
 
-                    sum += r6[0] * k6[0];
-                    sum += r6[1] * k6[1];
-                    sum += r6[2] * k6[2];
-                    sum += r6[3] * k6[3];
-                    sum += r6[4] * k6[4];
-                    sum += r6[5] * k6[5];
-                    sum += r6[6] * k6[6];
+                        sum += r6[0] * k6[0];
+                        sum += r6[1] * k6[1];
+                        sum += r6[2] * k6[2];
+                        sum += r6[3] * k6[3];
+                        sum += r6[4] * k6[4];
+                        sum += r6[5] * k6[5];
+                        sum += r6[6] * k6[6];
 
-                    *outptr += sum;
+                        *outptr += sum;
 
-                    r0 += 2;
-                    r1 += 2;
-                    r2 += 2;
-                    r3 += 2;
-                    r4 += 2;
-                    r5 += 2;
-                    r6 += 2;
-                    outptr++;
+                        r0 += 2;
+                        r1 += 2;
+                        r2 += 2;
+                        r3 += 2;
+                        r4 += 2;
+                        r5 += 2;
+                        r6 += 2;
+                        outptr++;
+                    }
+
+                    r0 += tailstep;
+                    r1 += tailstep;
+                    r2 += tailstep;
+                    r3 += tailstep;
+                    r4 += tailstep;
+                    r5 += tailstep;
+                    r6 += tailstep;
+
                 }
 
-                r0 += tailstep;
-                r1 += tailstep;
-                r2 += tailstep;
-                r3 += tailstep;
-                r4 += tailstep;
-                r5 += tailstep;
-                r6 += tailstep;
-
             }
-
-        }
+#if __APPLE__
+        });
+#endif
     }
 
 }

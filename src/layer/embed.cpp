@@ -63,6 +63,9 @@ int Embed::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) con
     #pragma omp parallel for num_threads(opt.num_threads)
     for (int q=0; q<words; q++)
     {
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
         float* outptr = top_blob.row(q);
 
         int word_index = ((const int*)bottom_blob)[q];
@@ -83,6 +86,9 @@ int Embed::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) con
                 outptr[p] += bias_data[p];
             }
         }
+#if __APPLE__
+        });
+#endif
     }
 
     return 0;

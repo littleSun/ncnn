@@ -16,103 +16,128 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(PReLU)
+    DEFINE_LAYER_CREATOR(PReLU)
 
-PReLU::PReLU()
-{
-    one_blob_only = true;
-    support_inplace = true;
-}
-
-int PReLU::load_param(const ParamDict& pd)
-{
-    num_slope = pd.get(0, 0);
-
-    return 0;
-}
-
-int PReLU::load_model(const ModelBin& mb)
-{
-    slope_data = mb.load(num_slope, 1);
-    if (slope_data.empty())
-        return -100;
-
-    return 0;
-}
-
-int PReLU::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int dims = bottom_top_blob.dims;
-
-    if (dims == 1)
+    PReLU::PReLU()
     {
-        int w = bottom_top_blob.w;
-
-        float* ptr = bottom_top_blob;
-
-        if (num_slope > 1)
-        {
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int i=0; i<w; i++)
-            {
-                if (ptr[i] < 0)
-                    ptr[i] *= slope_data[i];
-            }
-        }
-        else
-        {
-            float slope = slope_data[0];
-
-            #pragma omp parallel for num_threads(opt.num_threads)
-            for (int i=0; i<w; i++)
-            {
-                if (ptr[i] < 0)
-                    ptr[i] *= slope;
-            }
-        }
+        one_blob_only = true;
+        support_inplace = true;
     }
 
-    if (dims == 2)
+    int PReLU::load_param(const ParamDict& pd)
     {
-        int w = bottom_top_blob.w;
-        int h = bottom_top_blob.h;
+        num_slope = pd.get(0, 0);
 
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int i=0; i<h; i++)
-        {
-            float* ptr = bottom_top_blob.row(i);
-            float slope = num_slope > 1 ? slope_data[i] : slope_data[0];
-
-            for (int j=0; j<w; j++)
-            {
-                if (ptr[j] < 0)
-                    ptr[j] *= slope;
-            }
-        }
+        return 0;
     }
 
-    if (dims == 3)
+    int PReLU::load_model(const ModelBin& mb)
     {
-        int w = bottom_top_blob.w;
-        int h = bottom_top_blob.h;
-        int channels = bottom_top_blob.c;
-        int size = w * h;
+        slope_data = mb.load(num_slope, 1);
+        if (slope_data.empty())
+            return -100;
 
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
-            float* ptr = bottom_top_blob.channel(q);
-            float slope = num_slope > 1 ? slope_data[q] : slope_data[0];
-
-            for (int i=0; i<size; i++)
-            {
-                if (ptr[i] < 0)
-                    ptr[i] *= slope;
-            }
-        }
+        return 0;
     }
 
-    return 0;
-}
+    int PReLU::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
+    {
+        int dims = bottom_top_blob.dims;
+
+        if (dims == 1)
+        {
+            int w = bottom_top_blob.w;
+
+            float* ptr = bottom_top_blob;
+
+            if (num_slope > 1)
+            {
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int i=0; i<w; i++)
+                {
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                        if (ptr[i] < 0)
+                            ptr[i] *= slope_data[i];
+#if __APPLE__
+                    });
+#endif
+                }
+            }
+            else
+            {
+                float slope = slope_data[0];
+
+#pragma omp parallel for num_threads(opt.num_threads)
+                for (int i=0; i<w; i++)
+                {
+#if __APPLE__
+                    dispatch_async(get_gcd_concurrent(), ^{
+#endif
+
+                        if (ptr[i] < 0)
+                            ptr[i] *= slope;
+#if __APPLE__
+                    });
+#endif
+                }
+            }
+        }
+
+        if (dims == 2)
+        {
+            int w = bottom_top_blob.w;
+            int h = bottom_top_blob.h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int i=0; i<h; i++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    float* ptr = bottom_top_blob.row(i);
+                    float slope = num_slope > 1 ? slope_data[i] : slope_data[0];
+
+                    for (int j=0; j<w; j++)
+                    {
+                        if (ptr[j] < 0)
+                            ptr[j] *= slope;
+                    }
+#if __APPLE__
+                });
+#endif
+            }
+        }
+
+        if (dims == 3)
+        {
+            int w = bottom_top_blob.w;
+            int h = bottom_top_blob.h;
+            int channels = bottom_top_blob.c;
+            int size = w * h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+            for (int q=0; q<channels; q++)
+            {
+#if __APPLE__
+                dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                    float* ptr = bottom_top_blob.channel(q);
+                    float slope = num_slope > 1 ? slope_data[q] : slope_data[0];
+
+                    for (int i=0; i<size; i++)
+                    {
+                        if (ptr[i] < 0)
+                            ptr[i] *= slope;
+                    }
+#if __APPLE__
+                });
+#endif
+            }
+        }
+
+        return 0;
+    }
 
 } // namespace ncnn

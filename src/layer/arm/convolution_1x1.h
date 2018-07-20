@@ -128,31 +128,39 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
     const float* bias = _bias;
 
     // interleave
+#if __APPLE__
+    __block Mat tmp(8*4, inch/4+inch%4, size/8 + (size%8)/4 + size%4, 4u, opt.workspace_allocator);
+#else
     Mat tmp(8*4, inch/4+inch%4, size/8 + (size%8)/4 + size%4, 4u, opt.workspace_allocator);
+#endif
     {
         int nn_size = size >> 3;
         int remain_size_start = nn_size << 3;
 
-        #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
         for (int ii=0; ii<nn_size; ii++)
         {
-            int i = ii * 8;
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                int i = ii * 8;
 
-            const float* img0 = bottom_blob.channel(0);
-            img0 += i;
+                const float* img0 = bottom_blob.channel(0);
+                img0 += i;
 
-            float* tmpptr = tmp.channel(i/8);
+                float* tmpptr = tmp.channel(i/8);
 
-            for (int q=0; q<inch; q++)
-            {
+                for (int q=0; q<inch; q++)
+                {
 #if __ARM_NEON
-#if __aarch64__
+
+                    #if __aarch64__
                 vst1q_f32(tmpptr, vld1q_f32(img0));
                 vst1q_f32(tmpptr+4, vld1q_f32(img0+4));
 
                 tmpptr += 8;
                 img0 += bottom_blob.cstep;
-#else
+    #else
                 asm volatile(
                     "pld        [%0, #256]          \n"
                     "vld1.f32   {d0-d3}, [%0 :128]  \n"
@@ -165,39 +173,45 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
                 );
 
                 img0 += bottom_blob.cstep;
-#endif // __aarch64__
+    #endif // __aarch64__
 #else
-                tmpptr[0] = img0[0];
-                tmpptr[1] = img0[1];
-                tmpptr[2] = img0[2];
-                tmpptr[3] = img0[3];
-                tmpptr[4] = img0[4];
-                tmpptr[5] = img0[5];
-                tmpptr[6] = img0[6];
-                tmpptr[7] = img0[7];
+                    tmpptr[0] = img0[0];
+                    tmpptr[1] = img0[1];
+                    tmpptr[2] = img0[2];
+                    tmpptr[3] = img0[3];
+                    tmpptr[4] = img0[4];
+                    tmpptr[5] = img0[5];
+                    tmpptr[6] = img0[6];
+                    tmpptr[7] = img0[7];
 
-                tmpptr += 8;
-                img0 += bottom_blob.cstep;
+                    tmpptr += 8;
+                    img0 += bottom_blob.cstep;
 #endif // __ARM_NEON
-            }
+                }
+#if __APPLE__
+            });
+#endif
         }
 
         nn_size = (size - remain_size_start) >> 2;
 
-        #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
         for (int ii=0; ii<nn_size; ii++)
         {
-            int i = remain_size_start + ii * 4;
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                int i = remain_size_start + ii * 4;
 
-            const float* img0 = bottom_blob.channel(0);
-            img0 += i;
+                const float* img0 = bottom_blob.channel(0);
+                img0 += i;
 
-            float* tmpptr = tmp.channel(i/8 + (i%8)/4);
+                float* tmpptr = tmp.channel(i/8 + (i%8)/4);
 
-            for (int q=0; q<inch; q++)
-            {
+                for (int q=0; q<inch; q++)
+                {
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
                 vst1q_f32(tmpptr, vld1q_f32(img0));
 
                 tmpptr += 4;
@@ -217,33 +231,42 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
                 img0 += bottom_blob.cstep;
 #endif // __aarch64__
 #else
-                tmpptr[0] = img0[0];
-                tmpptr[1] = img0[1];
-                tmpptr[2] = img0[2];
-                tmpptr[3] = img0[3];
+                    tmpptr[0] = img0[0];
+                    tmpptr[1] = img0[1];
+                    tmpptr[2] = img0[2];
+                    tmpptr[3] = img0[3];
 
-                tmpptr += 4;
-                img0 += bottom_blob.cstep;
+                    tmpptr += 4;
+                    img0 += bottom_blob.cstep;
 #endif // __ARM_NEON
-            }
+                }
+#if __APPLE__
+            });
+#endif
         }
 
         remain_size_start += nn_size << 2;
 
-        #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
         for (int i=remain_size_start; i<size; i++)
         {
-            const float* img0 = bottom_blob.channel(0);
-            img0 += i;
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                const float* img0 = bottom_blob.channel(0);
+                img0 += i;
 
-            float* tmpptr = tmp.channel(i/8 + (i%8)/4 + i%4);
+                float* tmpptr = tmp.channel(i/8 + (i%8)/4 + i%4);
 
-            for (int q=0; q<inch; q++)
-            {
-                tmpptr[0] = img0[0];
-                tmpptr++;
-                img0 += bottom_blob.cstep;
-            }
+                for (int q=0; q<inch; q++)
+                {
+                    tmpptr[0] = img0[0];
+                    tmpptr++;
+                    img0 += bottom_blob.cstep;
+                }
+#if __APPLE__
+            });
+#endif
         }
     }
 
@@ -257,6 +280,10 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
     #pragma omp parallel for num_threads(opt.num_threads)
     for (int pp=0; pp<nn_outch; pp++)
     {
+
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
         int p = pp * 8;
 
         float* outptr0 = top_blob.channel(p);
@@ -728,37 +755,44 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
                 : "cc", "memory", "x4", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25"
             );
         }
+
+        #if __APPLE__
+            });
+#endif
     }
 #endif // __ARM_NEON && __aarch64__
 
     nn_outch = (outch - remain_outch_start) >> 2;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int pp=0; pp<nn_outch; pp++)
     {
-        int p = remain_outch_start + pp * 4;
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            int p = remain_outch_start + pp * 4;
 
-        float* outptr0 = top_blob.channel(p);
-        float* outptr1 = top_blob.channel(p+1);
-        float* outptr2 = top_blob.channel(p+2);
-        float* outptr3 = top_blob.channel(p+3);
+            float* outptr0 = top_blob.channel(p);
+            float* outptr1 = top_blob.channel(p+1);
+            float* outptr2 = top_blob.channel(p+2);
+            float* outptr3 = top_blob.channel(p+3);
 
-        const float zeros[4] = {0.f, 0.f, 0.f, 0.f};
-        const float* biasptr = bias ? bias + p : zeros;
+            const float zeros[4] = {0.f, 0.f, 0.f, 0.f};
+            const float* biasptr = bias ? bias + p : zeros;
 
-        int i = 0;
+            int i = 0;
 
-        for (; i+7<size; i+=8)
-        {
-            const float* tmpptr = tmp.channel(i/8);
+            for (; i+7<size; i+=8)
+            {
+                const float* tmpptr = tmp.channel(i/8);
 #if __ARM_NEON && __aarch64__
-            const float* kptr = kernel.channel(p/8 + (p%8)/4);
+                const float* kptr = kernel.channel(p/8 + (p%8)/4);
 #else
-            const float* kptr = kernel.channel(p/4);
+                const float* kptr = kernel.channel(p/4);
 #endif // __ARM_NEON && __aarch64__
 
 #if __ARM_NEON
-#if __aarch64__
+                #if __aarch64__
             asm volatile(
                 "ld1    {v0.4s}, [%12]          \n"
                 "dup    v8.4s, v0.s[0]          \n"
@@ -1014,138 +1048,138 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
             );
 #endif // __aarch64__
 #else
-            float sum0_0 = biasptr[0];
-            float sum0_1 = biasptr[0];
-            float sum0_2 = biasptr[0];
-            float sum0_3 = biasptr[0];
-            float sum0_4 = biasptr[0];
-            float sum0_5 = biasptr[0];
-            float sum0_6 = biasptr[0];
-            float sum0_7 = biasptr[0];
+                float sum0_0 = biasptr[0];
+                float sum0_1 = biasptr[0];
+                float sum0_2 = biasptr[0];
+                float sum0_3 = biasptr[0];
+                float sum0_4 = biasptr[0];
+                float sum0_5 = biasptr[0];
+                float sum0_6 = biasptr[0];
+                float sum0_7 = biasptr[0];
 
-            float sum1_0 = biasptr[1];
-            float sum1_1 = biasptr[1];
-            float sum1_2 = biasptr[1];
-            float sum1_3 = biasptr[1];
-            float sum1_4 = biasptr[1];
-            float sum1_5 = biasptr[1];
-            float sum1_6 = biasptr[1];
-            float sum1_7 = biasptr[1];
+                float sum1_0 = biasptr[1];
+                float sum1_1 = biasptr[1];
+                float sum1_2 = biasptr[1];
+                float sum1_3 = biasptr[1];
+                float sum1_4 = biasptr[1];
+                float sum1_5 = biasptr[1];
+                float sum1_6 = biasptr[1];
+                float sum1_7 = biasptr[1];
 
-            float sum2_0 = biasptr[2];
-            float sum2_1 = biasptr[2];
-            float sum2_2 = biasptr[2];
-            float sum2_3 = biasptr[2];
-            float sum2_4 = biasptr[2];
-            float sum2_5 = biasptr[2];
-            float sum2_6 = biasptr[2];
-            float sum2_7 = biasptr[2];
+                float sum2_0 = biasptr[2];
+                float sum2_1 = biasptr[2];
+                float sum2_2 = biasptr[2];
+                float sum2_3 = biasptr[2];
+                float sum2_4 = biasptr[2];
+                float sum2_5 = biasptr[2];
+                float sum2_6 = biasptr[2];
+                float sum2_7 = biasptr[2];
 
-            float sum3_0 = biasptr[3];
-            float sum3_1 = biasptr[3];
-            float sum3_2 = biasptr[3];
-            float sum3_3 = biasptr[3];
-            float sum3_4 = biasptr[3];
-            float sum3_5 = biasptr[3];
-            float sum3_6 = biasptr[3];
-            float sum3_7 = biasptr[3];
+                float sum3_0 = biasptr[3];
+                float sum3_1 = biasptr[3];
+                float sum3_2 = biasptr[3];
+                float sum3_3 = biasptr[3];
+                float sum3_4 = biasptr[3];
+                float sum3_5 = biasptr[3];
+                float sum3_6 = biasptr[3];
+                float sum3_7 = biasptr[3];
 
-            for (int q=0; q<inch; q++)
-            {
-                sum0_0 += tmpptr[0] * kptr[0];
-                sum0_1 += tmpptr[1] * kptr[0];
-                sum0_2 += tmpptr[2] * kptr[0];
-                sum0_3 += tmpptr[3] * kptr[0];
-                sum0_4 += tmpptr[4] * kptr[0];
-                sum0_5 += tmpptr[5] * kptr[0];
-                sum0_6 += tmpptr[6] * kptr[0];
-                sum0_7 += tmpptr[7] * kptr[0];
+                for (int q=0; q<inch; q++)
+                {
+                    sum0_0 += tmpptr[0] * kptr[0];
+                    sum0_1 += tmpptr[1] * kptr[0];
+                    sum0_2 += tmpptr[2] * kptr[0];
+                    sum0_3 += tmpptr[3] * kptr[0];
+                    sum0_4 += tmpptr[4] * kptr[0];
+                    sum0_5 += tmpptr[5] * kptr[0];
+                    sum0_6 += tmpptr[6] * kptr[0];
+                    sum0_7 += tmpptr[7] * kptr[0];
 
-                sum1_0 += tmpptr[0] * kptr[1];
-                sum1_1 += tmpptr[1] * kptr[1];
-                sum1_2 += tmpptr[2] * kptr[1];
-                sum1_3 += tmpptr[3] * kptr[1];
-                sum1_4 += tmpptr[4] * kptr[1];
-                sum1_5 += tmpptr[5] * kptr[1];
-                sum1_6 += tmpptr[6] * kptr[1];
-                sum1_7 += tmpptr[7] * kptr[1];
+                    sum1_0 += tmpptr[0] * kptr[1];
+                    sum1_1 += tmpptr[1] * kptr[1];
+                    sum1_2 += tmpptr[2] * kptr[1];
+                    sum1_3 += tmpptr[3] * kptr[1];
+                    sum1_4 += tmpptr[4] * kptr[1];
+                    sum1_5 += tmpptr[5] * kptr[1];
+                    sum1_6 += tmpptr[6] * kptr[1];
+                    sum1_7 += tmpptr[7] * kptr[1];
 
-                sum2_0 += tmpptr[0] * kptr[2];
-                sum2_1 += tmpptr[1] * kptr[2];
-                sum2_2 += tmpptr[2] * kptr[2];
-                sum2_3 += tmpptr[3] * kptr[2];
-                sum2_4 += tmpptr[4] * kptr[2];
-                sum2_5 += tmpptr[5] * kptr[2];
-                sum2_6 += tmpptr[6] * kptr[2];
-                sum2_7 += tmpptr[7] * kptr[2];
+                    sum2_0 += tmpptr[0] * kptr[2];
+                    sum2_1 += tmpptr[1] * kptr[2];
+                    sum2_2 += tmpptr[2] * kptr[2];
+                    sum2_3 += tmpptr[3] * kptr[2];
+                    sum2_4 += tmpptr[4] * kptr[2];
+                    sum2_5 += tmpptr[5] * kptr[2];
+                    sum2_6 += tmpptr[6] * kptr[2];
+                    sum2_7 += tmpptr[7] * kptr[2];
 
-                sum3_0 += tmpptr[0] * kptr[3];
-                sum3_1 += tmpptr[1] * kptr[3];
-                sum3_2 += tmpptr[2] * kptr[3];
-                sum3_3 += tmpptr[3] * kptr[3];
-                sum3_4 += tmpptr[4] * kptr[3];
-                sum3_5 += tmpptr[5] * kptr[3];
-                sum3_6 += tmpptr[6] * kptr[3];
-                sum3_7 += tmpptr[7] * kptr[3];
+                    sum3_0 += tmpptr[0] * kptr[3];
+                    sum3_1 += tmpptr[1] * kptr[3];
+                    sum3_2 += tmpptr[2] * kptr[3];
+                    sum3_3 += tmpptr[3] * kptr[3];
+                    sum3_4 += tmpptr[4] * kptr[3];
+                    sum3_5 += tmpptr[5] * kptr[3];
+                    sum3_6 += tmpptr[6] * kptr[3];
+                    sum3_7 += tmpptr[7] * kptr[3];
 
-                tmpptr += 8;
-                kptr += 4;
+                    tmpptr += 8;
+                    kptr += 4;
+                }
+
+                outptr0[0] = sum0_0;
+                outptr0[1] = sum0_1;
+                outptr0[2] = sum0_2;
+                outptr0[3] = sum0_3;
+                outptr0[4] = sum0_4;
+                outptr0[5] = sum0_5;
+                outptr0[6] = sum0_6;
+                outptr0[7] = sum0_7;
+
+                outptr1[0] = sum1_0;
+                outptr1[1] = sum1_1;
+                outptr1[2] = sum1_2;
+                outptr1[3] = sum1_3;
+                outptr1[4] = sum1_4;
+                outptr1[5] = sum1_5;
+                outptr1[6] = sum1_6;
+                outptr1[7] = sum1_7;
+
+                outptr2[0] = sum2_0;
+                outptr2[1] = sum2_1;
+                outptr2[2] = sum2_2;
+                outptr2[3] = sum2_3;
+                outptr2[4] = sum2_4;
+                outptr2[5] = sum2_5;
+                outptr2[6] = sum2_6;
+                outptr2[7] = sum2_7;
+
+                outptr3[0] = sum3_0;
+                outptr3[1] = sum3_1;
+                outptr3[2] = sum3_2;
+                outptr3[3] = sum3_3;
+                outptr3[4] = sum3_4;
+                outptr3[5] = sum3_5;
+                outptr3[6] = sum3_6;
+                outptr3[7] = sum3_7;
+
+                outptr0 += 8;
+                outptr1 += 8;
+                outptr2 += 8;
+                outptr3 += 8;
+#endif // __ARM_NEON
             }
 
-            outptr0[0] = sum0_0;
-            outptr0[1] = sum0_1;
-            outptr0[2] = sum0_2;
-            outptr0[3] = sum0_3;
-            outptr0[4] = sum0_4;
-            outptr0[5] = sum0_5;
-            outptr0[6] = sum0_6;
-            outptr0[7] = sum0_7;
-
-            outptr1[0] = sum1_0;
-            outptr1[1] = sum1_1;
-            outptr1[2] = sum1_2;
-            outptr1[3] = sum1_3;
-            outptr1[4] = sum1_4;
-            outptr1[5] = sum1_5;
-            outptr1[6] = sum1_6;
-            outptr1[7] = sum1_7;
-
-            outptr2[0] = sum2_0;
-            outptr2[1] = sum2_1;
-            outptr2[2] = sum2_2;
-            outptr2[3] = sum2_3;
-            outptr2[4] = sum2_4;
-            outptr2[5] = sum2_5;
-            outptr2[6] = sum2_6;
-            outptr2[7] = sum2_7;
-
-            outptr3[0] = sum3_0;
-            outptr3[1] = sum3_1;
-            outptr3[2] = sum3_2;
-            outptr3[3] = sum3_3;
-            outptr3[4] = sum3_4;
-            outptr3[5] = sum3_5;
-            outptr3[6] = sum3_6;
-            outptr3[7] = sum3_7;
-
-            outptr0 += 8;
-            outptr1 += 8;
-            outptr2 += 8;
-            outptr3 += 8;
-#endif // __ARM_NEON
-        }
-
-        for (; i+3<size; i+=4)
-        {
-            const float* tmpptr = tmp.channel(i/8 + (i%8)/4);
+            for (; i+3<size; i+=4)
+            {
+                const float* tmpptr = tmp.channel(i/8 + (i%8)/4);
 #if __ARM_NEON && __aarch64__
-            const float* kptr = kernel.channel(p/8 + (p%8)/4);
+                const float* kptr = kernel.channel(p/8 + (p%8)/4);
 #else
-            const float* kptr = kernel.channel(p/4);
+                const float* kptr = kernel.channel(p/4);
 #endif // __ARM_NEON && __aarch64__
 
 #if __ARM_NEON
-#if __aarch64__
+                #if __aarch64__
             asm volatile(
                 "ld1    {v0.4s}, [%12]          \n"
                 "dup    v8.4s, v0.s[0]          \n"
@@ -1335,90 +1369,90 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
             );
 #endif // __aarch64__
 #else
-            float sum0_0 = biasptr[0];
-            float sum0_1 = biasptr[0];
-            float sum0_2 = biasptr[0];
-            float sum0_3 = biasptr[0];
+                float sum0_0 = biasptr[0];
+                float sum0_1 = biasptr[0];
+                float sum0_2 = biasptr[0];
+                float sum0_3 = biasptr[0];
 
-            float sum1_0 = biasptr[1];
-            float sum1_1 = biasptr[1];
-            float sum1_2 = biasptr[1];
-            float sum1_3 = biasptr[1];
+                float sum1_0 = biasptr[1];
+                float sum1_1 = biasptr[1];
+                float sum1_2 = biasptr[1];
+                float sum1_3 = biasptr[1];
 
-            float sum2_0 = biasptr[2];
-            float sum2_1 = biasptr[2];
-            float sum2_2 = biasptr[2];
-            float sum2_3 = biasptr[2];
+                float sum2_0 = biasptr[2];
+                float sum2_1 = biasptr[2];
+                float sum2_2 = biasptr[2];
+                float sum2_3 = biasptr[2];
 
-            float sum3_0 = biasptr[3];
-            float sum3_1 = biasptr[3];
-            float sum3_2 = biasptr[3];
-            float sum3_3 = biasptr[3];
+                float sum3_0 = biasptr[3];
+                float sum3_1 = biasptr[3];
+                float sum3_2 = biasptr[3];
+                float sum3_3 = biasptr[3];
 
-            for (int q=0; q<inch; q++)
-            {
-                sum0_0 += tmpptr[0] * kptr[0];
-                sum0_1 += tmpptr[1] * kptr[0];
-                sum0_2 += tmpptr[2] * kptr[0];
-                sum0_3 += tmpptr[3] * kptr[0];
+                for (int q=0; q<inch; q++)
+                {
+                    sum0_0 += tmpptr[0] * kptr[0];
+                    sum0_1 += tmpptr[1] * kptr[0];
+                    sum0_2 += tmpptr[2] * kptr[0];
+                    sum0_3 += tmpptr[3] * kptr[0];
 
-                sum1_0 += tmpptr[0] * kptr[1];
-                sum1_1 += tmpptr[1] * kptr[1];
-                sum1_2 += tmpptr[2] * kptr[1];
-                sum1_3 += tmpptr[3] * kptr[1];
+                    sum1_0 += tmpptr[0] * kptr[1];
+                    sum1_1 += tmpptr[1] * kptr[1];
+                    sum1_2 += tmpptr[2] * kptr[1];
+                    sum1_3 += tmpptr[3] * kptr[1];
 
-                sum2_0 += tmpptr[0] * kptr[2];
-                sum2_1 += tmpptr[1] * kptr[2];
-                sum2_2 += tmpptr[2] * kptr[2];
-                sum2_3 += tmpptr[3] * kptr[2];
+                    sum2_0 += tmpptr[0] * kptr[2];
+                    sum2_1 += tmpptr[1] * kptr[2];
+                    sum2_2 += tmpptr[2] * kptr[2];
+                    sum2_3 += tmpptr[3] * kptr[2];
 
-                sum3_0 += tmpptr[0] * kptr[3];
-                sum3_1 += tmpptr[1] * kptr[3];
-                sum3_2 += tmpptr[2] * kptr[3];
-                sum3_3 += tmpptr[3] * kptr[3];
+                    sum3_0 += tmpptr[0] * kptr[3];
+                    sum3_1 += tmpptr[1] * kptr[3];
+                    sum3_2 += tmpptr[2] * kptr[3];
+                    sum3_3 += tmpptr[3] * kptr[3];
 
-                tmpptr += 4;
-                kptr += 4;
+                    tmpptr += 4;
+                    kptr += 4;
+                }
+
+                outptr0[0] = sum0_0;
+                outptr0[1] = sum0_1;
+                outptr0[2] = sum0_2;
+                outptr0[3] = sum0_3;
+
+                outptr1[0] = sum1_0;
+                outptr1[1] = sum1_1;
+                outptr1[2] = sum1_2;
+                outptr1[3] = sum1_3;
+
+                outptr2[0] = sum2_0;
+                outptr2[1] = sum2_1;
+                outptr2[2] = sum2_2;
+                outptr2[3] = sum2_3;
+
+                outptr3[0] = sum3_0;
+                outptr3[1] = sum3_1;
+                outptr3[2] = sum3_2;
+                outptr3[3] = sum3_3;
+
+                outptr0 += 4;
+                outptr1 += 4;
+                outptr2 += 4;
+                outptr3 += 4;
+#endif // __ARM_NEON
             }
 
-            outptr0[0] = sum0_0;
-            outptr0[1] = sum0_1;
-            outptr0[2] = sum0_2;
-            outptr0[3] = sum0_3;
-
-            outptr1[0] = sum1_0;
-            outptr1[1] = sum1_1;
-            outptr1[2] = sum1_2;
-            outptr1[3] = sum1_3;
-
-            outptr2[0] = sum2_0;
-            outptr2[1] = sum2_1;
-            outptr2[2] = sum2_2;
-            outptr2[3] = sum2_3;
-
-            outptr3[0] = sum3_0;
-            outptr3[1] = sum3_1;
-            outptr3[2] = sum3_2;
-            outptr3[3] = sum3_3;
-
-            outptr0 += 4;
-            outptr1 += 4;
-            outptr2 += 4;
-            outptr3 += 4;
-#endif // __ARM_NEON
-        }
-
-        for (; i<size; i++)
-        {
-            const float* tmpptr = tmp.channel(i/8 + (i%8)/4 + i%4);
+            for (; i<size; i++)
+            {
+                const float* tmpptr = tmp.channel(i/8 + (i%8)/4 + i%4);
 #if __ARM_NEON && __aarch64__
-            const float* kptr = kernel.channel(p/8 + (p%8)/4);
+                const float* kptr = kernel.channel(p/8 + (p%8)/4);
 #else
-            const float* kptr = kernel.channel(p/4);
+                const float* kptr = kernel.channel(p/4);
 #endif // __ARM_NEON && __aarch64__
 
 #if __ARM_NEON
-#if __aarch64__
+                #if __aarch64__
             asm volatile(
                 "ld1    {v12.4s}, [%12]         \n"
 
@@ -1582,59 +1616,65 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
             );
 #endif // __aarch64__
 #else
-            float sum0 = biasptr[0];
-            float sum1 = biasptr[1];
-            float sum2 = biasptr[2];
-            float sum3 = biasptr[3];
+                float sum0 = biasptr[0];
+                float sum1 = biasptr[1];
+                float sum2 = biasptr[2];
+                float sum3 = biasptr[3];
 
-            for (int q=0; q<inch; q++)
-            {
-                sum0 += tmpptr[0] * kptr[0];
-                sum1 += tmpptr[0] * kptr[1];
-                sum2 += tmpptr[0] * kptr[2];
-                sum3 += tmpptr[0] * kptr[3];
+                for (int q=0; q<inch; q++)
+                {
+                    sum0 += tmpptr[0] * kptr[0];
+                    sum1 += tmpptr[0] * kptr[1];
+                    sum2 += tmpptr[0] * kptr[2];
+                    sum3 += tmpptr[0] * kptr[3];
 
-                tmpptr++;
-                kptr += 4;
-            }
+                    tmpptr++;
+                    kptr += 4;
+                }
 
-            outptr0[0] = sum0;
-            outptr1[0] = sum1;
-            outptr2[0] = sum2;
-            outptr3[0] = sum3;
+                outptr0[0] = sum0;
+                outptr1[0] = sum1;
+                outptr2[0] = sum2;
+                outptr3[0] = sum3;
 
-            outptr0++;
-            outptr1++;
-            outptr2++;
-            outptr3++;
+                outptr0++;
+                outptr1++;
+                outptr2++;
+                outptr3++;
 #endif // __ARM_NEON
-        }
+            }
+#if __APPLE__
+        });
+#endif
     }
 
     remain_outch_start += nn_outch << 2;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int p=remain_outch_start; p<outch; p++)
     {
-        Mat out0 = top_blob.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            Mat out0 = top_blob.channel(p);
 
-        const float bias0 = bias ? bias[p] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
 
-        float* outptr0 = out0;
+            float* outptr0 = out0;
 
-        int i = 0;
+            int i = 0;
 
-        for (; i+7<size; i+=8)
-        {
-            const float* tmpptr = tmp.channel(i/8);
+            for (; i+7<size; i+=8)
+            {
+                const float* tmpptr = tmp.channel(i/8);
 #if __ARM_NEON && __aarch64__
-            const float* kptr = kernel.channel(p/8 + (p%8)/4 + p%4);
+                const float* kptr = kernel.channel(p/8 + (p%8)/4 + p%4);
 #else
-            const float* kptr = kernel.channel(p/4 + p%4);
+                const float* kptr = kernel.channel(p/4 + p%4);
 #endif // __ARM_NEON && __aarch64__
 
 #if __ARM_NEON
-#if __aarch64__
+                #if __aarch64__
             asm volatile(
                 "dup    v8.4s, %w6              \n"
                 "dup    v9.4s, %w6              \n"
@@ -1786,54 +1826,54 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
             );
 #endif // __aarch64__
 #else
-            float sum0 = bias0;
-            float sum1 = bias0;
-            float sum2 = bias0;
-            float sum3 = bias0;
-            float sum4 = bias0;
-            float sum5 = bias0;
-            float sum6 = bias0;
-            float sum7 = bias0;
+                float sum0 = bias0;
+                float sum1 = bias0;
+                float sum2 = bias0;
+                float sum3 = bias0;
+                float sum4 = bias0;
+                float sum5 = bias0;
+                float sum6 = bias0;
+                float sum7 = bias0;
 
-            for (int q=0; q<inch; q++)
-            {
-                sum0 += tmpptr[0] * kptr[0];
-                sum1 += tmpptr[1] * kptr[0];
-                sum2 += tmpptr[2] * kptr[0];
-                sum3 += tmpptr[3] * kptr[0];
-                sum4 += tmpptr[4] * kptr[0];
-                sum5 += tmpptr[5] * kptr[0];
-                sum6 += tmpptr[6] * kptr[0];
-                sum7 += tmpptr[7] * kptr[0];
+                for (int q=0; q<inch; q++)
+                {
+                    sum0 += tmpptr[0] * kptr[0];
+                    sum1 += tmpptr[1] * kptr[0];
+                    sum2 += tmpptr[2] * kptr[0];
+                    sum3 += tmpptr[3] * kptr[0];
+                    sum4 += tmpptr[4] * kptr[0];
+                    sum5 += tmpptr[5] * kptr[0];
+                    sum6 += tmpptr[6] * kptr[0];
+                    sum7 += tmpptr[7] * kptr[0];
 
-                tmpptr += 8;
-                kptr++;
+                    tmpptr += 8;
+                    kptr++;
+                }
+
+                outptr0[0] = sum0;
+                outptr0[1] = sum1;
+                outptr0[2] = sum2;
+                outptr0[3] = sum3;
+                outptr0[4] = sum4;
+                outptr0[5] = sum5;
+                outptr0[6] = sum6;
+                outptr0[7] = sum7;
+
+                outptr0 += 8;
+#endif // __ARM_NEON
             }
 
-            outptr0[0] = sum0;
-            outptr0[1] = sum1;
-            outptr0[2] = sum2;
-            outptr0[3] = sum3;
-            outptr0[4] = sum4;
-            outptr0[5] = sum5;
-            outptr0[6] = sum6;
-            outptr0[7] = sum7;
-
-            outptr0 += 8;
-#endif // __ARM_NEON
-        }
-
-        for (; i+3<size; i+=4)
-        {
-            const float* tmpptr = tmp.channel(i/8 + (i%8)/4);
+            for (; i+3<size; i+=4)
+            {
+                const float* tmpptr = tmp.channel(i/8 + (i%8)/4);
 #if __ARM_NEON && __aarch64__
-            const float* kptr = kernel.channel(p/8 + (p%8)/4 + p%4);
+                const float* kptr = kernel.channel(p/8 + (p%8)/4 + p%4);
 #else
-            const float* kptr = kernel.channel(p/4 + p%4);
+                const float* kptr = kernel.channel(p/4 + p%4);
 #endif // __ARM_NEON && __aarch64__
 
 #if __ARM_NEON
-#if __aarch64__
+                #if __aarch64__
             asm volatile(
                 "dup    v8.4s, %w6              \n"
 
@@ -1959,44 +1999,44 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
             );
 #endif // __aarch64__
 #else
-            float sum0 = bias0;
-            float sum1 = bias0;
-            float sum2 = bias0;
-            float sum3 = bias0;
+                float sum0 = bias0;
+                float sum1 = bias0;
+                float sum2 = bias0;
+                float sum3 = bias0;
 
-            for (int q=0; q<inch; q++)
-            {
-                sum0 += tmpptr[0] * kptr[0];
-                sum1 += tmpptr[1] * kptr[0];
-                sum2 += tmpptr[2] * kptr[0];
-                sum3 += tmpptr[3] * kptr[0];
+                for (int q=0; q<inch; q++)
+                {
+                    sum0 += tmpptr[0] * kptr[0];
+                    sum1 += tmpptr[1] * kptr[0];
+                    sum2 += tmpptr[2] * kptr[0];
+                    sum3 += tmpptr[3] * kptr[0];
 
-                tmpptr += 4;
-                kptr++;
+                    tmpptr += 4;
+                    kptr++;
+                }
+
+                outptr0[0] = sum0;
+                outptr0[1] = sum1;
+                outptr0[2] = sum2;
+                outptr0[3] = sum3;
+
+                outptr0 += 4;
+#endif // __ARM_NEON
             }
 
-            outptr0[0] = sum0;
-            outptr0[1] = sum1;
-            outptr0[2] = sum2;
-            outptr0[3] = sum3;
-
-            outptr0 += 4;
-#endif // __ARM_NEON
-        }
-
-        for (; i<size; i++)
-        {
-            const float* tmpptr = tmp.channel(i/8 + (i%8)/4 + i%4);
+            for (; i<size; i++)
+            {
+                const float* tmpptr = tmp.channel(i/8 + (i%8)/4 + i%4);
 #if __ARM_NEON && __aarch64__
-            const float* kptr = kernel.channel(p/8 + (p%8)/4 + p%4);
+                const float* kptr = kernel.channel(p/8 + (p%8)/4 + p%4);
 #else
-            const float* kptr = kernel.channel(p/4 + p%4);
+                const float* kptr = kernel.channel(p/4 + p%4);
 #endif // __ARM_NEON && __aarch64__
 
-            int q = 0;
+                int q = 0;
 
 #if __ARM_NEON
-            float32x4_t _sum0 = vdupq_n_f32(0.f);
+                float32x4_t _sum0 = vdupq_n_f32(0.f);
 
             for (; q+3<inch; q+=4)
             {
@@ -2020,20 +2060,23 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
             float sum0 = bias0 + vget_lane_f32(vpadd_f32(_ss, _ss), 0);
 #endif
 #else
-            float sum0 = bias0;
+                float sum0 = bias0;
 #endif // __ARM_NEON
 
-            for (; q<inch; q++)
-            {
-                sum0 += tmpptr[0] * kptr[0];
-                tmpptr++;
-                kptr++;
+                for (; q<inch; q++)
+                {
+                    sum0 += tmpptr[0] * kptr[0];
+                    tmpptr++;
+                    kptr++;
+                }
+
+                outptr0[0] = sum0;
+
+                outptr0++;
             }
-
-            outptr0[0] = sum0;
-
-            outptr0++;
-        }
+#if __APPLE__
+        });
+#endif
     }
 
 //     // NOTE sgemm
@@ -2086,6 +2129,9 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     #pragma omp parallel for num_threads(opt.num_threads)
     for (int pp=0; pp<nn_outch; pp++)
     {
+        #if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
         int p = pp * 8;
 
         Mat out0 = top_blob.channel(p);
@@ -2703,6 +2749,9 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                 outptr7++;
             }
         }
+        #if __APPLE__
+        });
+#endif
     }
 
 #else
@@ -2710,71 +2759,74 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     nn_outch = outch / 6;
     remain_outch_start = nn_outch * 6;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int pp=0; pp<nn_outch; pp++)
     {
-        int p = pp * 6;
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            int p = pp * 6;
 
-        Mat out0 = top_blob.channel(p);
-        Mat out1 = top_blob.channel(p+1);
-        Mat out2 = top_blob.channel(p+2);
-        Mat out3 = top_blob.channel(p+3);
-        Mat out4 = top_blob.channel(p+4);
-        Mat out5 = top_blob.channel(p+5);
+            Mat out0 = top_blob.channel(p);
+            Mat out1 = top_blob.channel(p+1);
+            Mat out2 = top_blob.channel(p+2);
+            Mat out3 = top_blob.channel(p+3);
+            Mat out4 = top_blob.channel(p+4);
+            Mat out5 = top_blob.channel(p+5);
 
-        const float bias0 = bias ? bias[p] : 0.f;
-        const float bias1 = bias ? bias[p+1] : 0.f;
-        const float bias2 = bias ? bias[p+2] : 0.f;
-        const float bias3 = bias ? bias[p+3] : 0.f;
-        const float bias4 = bias ? bias[p+4] : 0.f;
-        const float bias5 = bias ? bias[p+5] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
+            const float bias1 = bias ? bias[p+1] : 0.f;
+            const float bias2 = bias ? bias[p+2] : 0.f;
+            const float bias3 = bias ? bias[p+3] : 0.f;
+            const float bias4 = bias ? bias[p+4] : 0.f;
+            const float bias5 = bias ? bias[p+5] : 0.f;
 
-        out0.fill(bias0);
-        out1.fill(bias1);
-        out2.fill(bias2);
-        out3.fill(bias3);
-        out4.fill(bias4);
-        out5.fill(bias5);
+            out0.fill(bias0);
+            out1.fill(bias1);
+            out2.fill(bias2);
+            out3.fill(bias3);
+            out4.fill(bias4);
+            out5.fill(bias5);
 
-        int q = 0;
+            int q = 0;
 
-        for (; q+3<inch; q+=4)
-        {
-            float* outptr0 = out0;
-            float* outptr1 = out1;
-            float* outptr2 = out2;
-            float* outptr3 = out3;
-            float* outptr4 = out4;
-            float* outptr5 = out5;
+            for (; q+3<inch; q+=4)
+            {
+                float* outptr0 = out0;
+                float* outptr1 = out1;
+                float* outptr2 = out2;
+                float* outptr3 = out3;
+                float* outptr4 = out4;
+                float* outptr5 = out5;
 
-            const float* img0 = bottom_blob.channel(q);
-            const float* img1 = bottom_blob.channel(q+1);
-            const float* img2 = bottom_blob.channel(q+2);
-            const float* img3 = bottom_blob.channel(q+3);
+                const float* img0 = bottom_blob.channel(q);
+                const float* img1 = bottom_blob.channel(q+1);
+                const float* img2 = bottom_blob.channel(q+2);
+                const float* img3 = bottom_blob.channel(q+3);
 
-            const float* kernel0 = kernel + p*inch + q;
-            const float* kernel1 = kernel + (p+1)*inch + q;
-            const float* kernel2 = kernel + (p+2)*inch + q;
-            const float* kernel3 = kernel + (p+3)*inch + q;
-            const float* kernel4 = kernel + (p+4)*inch + q;
-            const float* kernel5 = kernel + (p+5)*inch + q;
+                const float* kernel0 = kernel + p*inch + q;
+                const float* kernel1 = kernel + (p+1)*inch + q;
+                const float* kernel2 = kernel + (p+2)*inch + q;
+                const float* kernel3 = kernel + (p+3)*inch + q;
+                const float* kernel4 = kernel + (p+4)*inch + q;
+                const float* kernel5 = kernel + (p+5)*inch + q;
 
-            const float* r0 = img0;
-            const float* r1 = img1;
-            const float* r2 = img2;
-            const float* r3 = img3;
+                const float* r0 = img0;
+                const float* r1 = img1;
+                const float* r2 = img2;
+                const float* r3 = img3;
 
-            int size = outw * outh;
+                int size = outw * outh;
 
 #if __ARM_NEON
-            int nn = size >> 2;
+                int nn = size >> 2;
             int remain = size & 3;
 #else
-            int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-            float32x4_t _k0 = vld1q_f32(kernel0);
+                float32x4_t _k0 = vld1q_f32(kernel0);
             float32x4_t _k1 = vld1q_f32(kernel1);
             float32x4_t _k2 = vld1q_f32(kernel2);
             float32x4_t _k3 = vld1q_f32(kernel3);
@@ -2911,74 +2963,74 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
             }
 #endif // __ARM_NEON
 
-            for (; remain>0; remain--)
-            {
-                // TODO neon optimize
-                float sum0 = *r0 * kernel0[0] + *r1 * kernel0[1] + *r2 * kernel0[2] + *r3 * kernel0[3];
-                float sum1 = *r0 * kernel1[0] + *r1 * kernel1[1] + *r2 * kernel1[2] + *r3 * kernel1[3];
-                float sum2 = *r0 * kernel2[0] + *r1 * kernel2[1] + *r2 * kernel2[2] + *r3 * kernel2[3];
-                float sum3 = *r0 * kernel3[0] + *r1 * kernel3[1] + *r2 * kernel3[2] + *r3 * kernel3[3];
-                float sum4 = *r0 * kernel4[0] + *r1 * kernel4[1] + *r2 * kernel4[2] + *r3 * kernel4[3];
-                float sum5 = *r0 * kernel5[0] + *r1 * kernel5[1] + *r2 * kernel5[2] + *r3 * kernel5[3];
+                for (; remain>0; remain--)
+                {
+                    // TODO neon optimize
+                    float sum0 = *r0 * kernel0[0] + *r1 * kernel0[1] + *r2 * kernel0[2] + *r3 * kernel0[3];
+                    float sum1 = *r0 * kernel1[0] + *r1 * kernel1[1] + *r2 * kernel1[2] + *r3 * kernel1[3];
+                    float sum2 = *r0 * kernel2[0] + *r1 * kernel2[1] + *r2 * kernel2[2] + *r3 * kernel2[3];
+                    float sum3 = *r0 * kernel3[0] + *r1 * kernel3[1] + *r2 * kernel3[2] + *r3 * kernel3[3];
+                    float sum4 = *r0 * kernel4[0] + *r1 * kernel4[1] + *r2 * kernel4[2] + *r3 * kernel4[3];
+                    float sum5 = *r0 * kernel5[0] + *r1 * kernel5[1] + *r2 * kernel5[2] + *r3 * kernel5[3];
 
-                *outptr0 += sum0;
-                *outptr1 += sum1;
-                *outptr2 += sum2;
-                *outptr3 += sum3;
-                *outptr4 += sum4;
-                *outptr5 += sum5;
+                    *outptr0 += sum0;
+                    *outptr1 += sum1;
+                    *outptr2 += sum2;
+                    *outptr3 += sum3;
+                    *outptr4 += sum4;
+                    *outptr5 += sum5;
 
-                r0++;
-                r1++;
-                r2++;
-                r3++;
-                outptr0++;
-                outptr1++;
-                outptr2++;
-                outptr3++;
-                outptr4++;
-                outptr5++;
+                    r0++;
+                    r1++;
+                    r2++;
+                    r3++;
+                    outptr0++;
+                    outptr1++;
+                    outptr2++;
+                    outptr3++;
+                    outptr4++;
+                    outptr5++;
+                }
             }
-        }
 
-        for (; q<inch; q++)
-        {
-            float* outptr0 = out0;
-            float* outptr1 = out1;
-            float* outptr2 = out2;
-            float* outptr3 = out3;
-            float* outptr4 = out4;
-            float* outptr5 = out5;
+            for (; q<inch; q++)
+            {
+                float* outptr0 = out0;
+                float* outptr1 = out1;
+                float* outptr2 = out2;
+                float* outptr3 = out3;
+                float* outptr4 = out4;
+                float* outptr5 = out5;
 
-            const float* img0 = bottom_blob.channel(q);
+                const float* img0 = bottom_blob.channel(q);
 
-            const float* kernel0 = kernel + p*inch + q;
-            const float* kernel1 = kernel + (p+1)*inch + q;
-            const float* kernel2 = kernel + (p+2)*inch + q;
-            const float* kernel3 = kernel + (p+3)*inch + q;
-            const float* kernel4 = kernel + (p+4)*inch + q;
-            const float* kernel5 = kernel + (p+5)*inch + q;
+                const float* kernel0 = kernel + p*inch + q;
+                const float* kernel1 = kernel + (p+1)*inch + q;
+                const float* kernel2 = kernel + (p+2)*inch + q;
+                const float* kernel3 = kernel + (p+3)*inch + q;
+                const float* kernel4 = kernel + (p+4)*inch + q;
+                const float* kernel5 = kernel + (p+5)*inch + q;
 
-            const float k0 = kernel0[0];
-            const float k1 = kernel1[0];
-            const float k2 = kernel2[0];
-            const float k3 = kernel3[0];
-            const float k4 = kernel4[0];
-            const float k5 = kernel5[0];
+                const float k0 = kernel0[0];
+                const float k1 = kernel1[0];
+                const float k2 = kernel2[0];
+                const float k3 = kernel3[0];
+                const float k4 = kernel4[0];
+                const float k5 = kernel5[0];
 
-            const float* r0 = img0;
+                const float* r0 = img0;
 
-            int size = outw * outh;
+                int size = outw * outh;
 
 #if __ARM_NEON
-            int nn = size >> 2;
+                int nn = size >> 2;
             int remain = size & 3;
 #else
-            int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-            float32x4_t _k0 = vdupq_n_f32(k0);
+                float32x4_t _k0 = vdupq_n_f32(k0);
             float32x4_t _k1 = vdupq_n_f32(k1);
             float32x4_t _k2 = vdupq_n_f32(k2);
             float32x4_t _k3 = vdupq_n_f32(k3);
@@ -3070,92 +3122,98 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
             }
 #endif // __ARM_NEON
 
-            for (; remain>0; remain--)
-            {
-                // TODO neon optimize
-                float sum0 = *r0 * k0;
-                float sum1 = *r0 * k1;
-                float sum2 = *r0 * k2;
-                float sum3 = *r0 * k3;
-                float sum4 = *r0 * k4;
-                float sum5 = *r0 * k5;
+                for (; remain>0; remain--)
+                {
+                    // TODO neon optimize
+                    float sum0 = *r0 * k0;
+                    float sum1 = *r0 * k1;
+                    float sum2 = *r0 * k2;
+                    float sum3 = *r0 * k3;
+                    float sum4 = *r0 * k4;
+                    float sum5 = *r0 * k5;
 
-                *outptr0 += sum0;
-                *outptr1 += sum1;
-                *outptr2 += sum2;
-                *outptr3 += sum3;
-                *outptr4 += sum4;
-                *outptr5 += sum5;
+                    *outptr0 += sum0;
+                    *outptr1 += sum1;
+                    *outptr2 += sum2;
+                    *outptr3 += sum3;
+                    *outptr4 += sum4;
+                    *outptr5 += sum5;
 
-                r0++;
-                outptr0++;
-                outptr1++;
-                outptr2++;
-                outptr3++;
-                outptr4++;
-                outptr5++;
+                    r0++;
+                    outptr0++;
+                    outptr1++;
+                    outptr2++;
+                    outptr3++;
+                    outptr4++;
+                    outptr5++;
+                }
             }
-        }
+#if __APPLE__
+        });
+#endif
     }
 #endif // __ARM_NEON && __aarch64__
 
     nn_outch = (outch - remain_outch_start) >> 2;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int pp=0; pp<nn_outch; pp++)
     {
-        int p = remain_outch_start + pp * 4;
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            int p = remain_outch_start + pp * 4;
 
-        Mat out0 = top_blob.channel(p);
-        Mat out1 = top_blob.channel(p+1);
-        Mat out2 = top_blob.channel(p+2);
-        Mat out3 = top_blob.channel(p+3);
+            Mat out0 = top_blob.channel(p);
+            Mat out1 = top_blob.channel(p+1);
+            Mat out2 = top_blob.channel(p+2);
+            Mat out3 = top_blob.channel(p+3);
 
-        const float bias0 = bias ? bias[p] : 0.f;
-        const float bias1 = bias ? bias[p+1] : 0.f;
-        const float bias2 = bias ? bias[p+2] : 0.f;
-        const float bias3 = bias ? bias[p+3] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
+            const float bias1 = bias ? bias[p+1] : 0.f;
+            const float bias2 = bias ? bias[p+2] : 0.f;
+            const float bias3 = bias ? bias[p+3] : 0.f;
 
-        out0.fill(bias0);
-        out1.fill(bias1);
-        out2.fill(bias2);
-        out3.fill(bias3);
+            out0.fill(bias0);
+            out1.fill(bias1);
+            out2.fill(bias2);
+            out3.fill(bias3);
 
-        int q = 0;
+            int q = 0;
 
-        for (; q+3<inch; q+=4)
-        {
-            float* outptr0 = out0;
-            float* outptr1 = out1;
-            float* outptr2 = out2;
-            float* outptr3 = out3;
+            for (; q+3<inch; q+=4)
+            {
+                float* outptr0 = out0;
+                float* outptr1 = out1;
+                float* outptr2 = out2;
+                float* outptr3 = out3;
 
-            const float* img0 = bottom_blob.channel(q);
-            const float* img1 = bottom_blob.channel(q+1);
-            const float* img2 = bottom_blob.channel(q+2);
-            const float* img3 = bottom_blob.channel(q+3);
+                const float* img0 = bottom_blob.channel(q);
+                const float* img1 = bottom_blob.channel(q+1);
+                const float* img2 = bottom_blob.channel(q+2);
+                const float* img3 = bottom_blob.channel(q+3);
 
-            const float* kernel0 = kernel + p*inch + q;
-            const float* kernel1 = kernel + (p+1)*inch + q;
-            const float* kernel2 = kernel + (p+2)*inch + q;
-            const float* kernel3 = kernel + (p+3)*inch + q;
+                const float* kernel0 = kernel + p*inch + q;
+                const float* kernel1 = kernel + (p+1)*inch + q;
+                const float* kernel2 = kernel + (p+2)*inch + q;
+                const float* kernel3 = kernel + (p+3)*inch + q;
 
-            const float* r0 = img0;
-            const float* r1 = img1;
-            const float* r2 = img2;
-            const float* r3 = img3;
+                const float* r0 = img0;
+                const float* r1 = img1;
+                const float* r2 = img2;
+                const float* r3 = img3;
 
-            int size = outw * outh;
+                int size = outw * outh;
 
 #if __ARM_NEON
-            int nn = size >> 3;
+                int nn = size >> 3;
             int remain = size & 7;
 #else
-            int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-            float32x4_t _k0 = vld1q_f32(kernel0);
+                float32x4_t _k0 = vld1q_f32(kernel0);
             float32x4_t _k1 = vld1q_f32(kernel1);
             float32x4_t _k2 = vld1q_f32(kernel2);
             float32x4_t _k3 = vld1q_f32(kernel3);
@@ -3404,62 +3462,62 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                // TODO neon optimize
-                float sum0 = *r0 * kernel0[0] + *r1 * kernel0[1] + *r2 * kernel0[2] + *r3 * kernel0[3];
-                float sum1 = *r0 * kernel1[0] + *r1 * kernel1[1] + *r2 * kernel1[2] + *r3 * kernel1[3];
-                float sum2 = *r0 * kernel2[0] + *r1 * kernel2[1] + *r2 * kernel2[2] + *r3 * kernel2[3];
-                float sum3 = *r0 * kernel3[0] + *r1 * kernel3[1] + *r2 * kernel3[2] + *r3 * kernel3[3];
+                for (; remain>0; remain--)
+                {
+                    // TODO neon optimize
+                    float sum0 = *r0 * kernel0[0] + *r1 * kernel0[1] + *r2 * kernel0[2] + *r3 * kernel0[3];
+                    float sum1 = *r0 * kernel1[0] + *r1 * kernel1[1] + *r2 * kernel1[2] + *r3 * kernel1[3];
+                    float sum2 = *r0 * kernel2[0] + *r1 * kernel2[1] + *r2 * kernel2[2] + *r3 * kernel2[3];
+                    float sum3 = *r0 * kernel3[0] + *r1 * kernel3[1] + *r2 * kernel3[2] + *r3 * kernel3[3];
 
-                *outptr0 += sum0;
-                *outptr1 += sum1;
-                *outptr2 += sum2;
-                *outptr3 += sum3;
+                    *outptr0 += sum0;
+                    *outptr1 += sum1;
+                    *outptr2 += sum2;
+                    *outptr3 += sum3;
 
-                r0++;
-                r1++;
-                r2++;
-                r3++;
-                outptr0++;
-                outptr1++;
-                outptr2++;
-                outptr3++;
+                    r0++;
+                    r1++;
+                    r2++;
+                    r3++;
+                    outptr0++;
+                    outptr1++;
+                    outptr2++;
+                    outptr3++;
+                }
             }
-        }
 
-        for (; q<inch; q++)
-        {
-            float* outptr0 = out0;
-            float* outptr1 = out1;
-            float* outptr2 = out2;
-            float* outptr3 = out3;
+            for (; q<inch; q++)
+            {
+                float* outptr0 = out0;
+                float* outptr1 = out1;
+                float* outptr2 = out2;
+                float* outptr3 = out3;
 
-            const float* img0 = bottom_blob.channel(q);
+                const float* img0 = bottom_blob.channel(q);
 
-            const float* kernel0 = kernel + p*inch + q;
-            const float* kernel1 = kernel + (p+1)*inch + q;
-            const float* kernel2 = kernel + (p+2)*inch + q;
-            const float* kernel3 = kernel + (p+3)*inch + q;
+                const float* kernel0 = kernel + p*inch + q;
+                const float* kernel1 = kernel + (p+1)*inch + q;
+                const float* kernel2 = kernel + (p+2)*inch + q;
+                const float* kernel3 = kernel + (p+3)*inch + q;
 
-            const float k0 = kernel0[0];
-            const float k1 = kernel1[0];
-            const float k2 = kernel2[0];
-            const float k3 = kernel3[0];
+                const float k0 = kernel0[0];
+                const float k1 = kernel1[0];
+                const float k2 = kernel2[0];
+                const float k3 = kernel3[0];
 
-            const float* r0 = img0;
+                const float* r0 = img0;
 
-            int size = outw * outh;
+                int size = outw * outh;
 
 #if __ARM_NEON
-            int nn = size >> 3;
+                int nn = size >> 3;
             int remain = size & 7;
 #else
-            int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-            float32x4_t _k0 = vdupq_n_f32(k0);
+                float32x4_t _k0 = vdupq_n_f32(k0);
             float32x4_t _k1 = vdupq_n_f32(k1);
             float32x4_t _k2 = vdupq_n_f32(k2);
             float32x4_t _k3 = vdupq_n_f32(k3);
@@ -3581,72 +3639,78 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                // TODO neon optimize
-                float sum0 = *r0 * k0;
-                float sum1 = *r0 * k1;
-                float sum2 = *r0 * k2;
-                float sum3 = *r0 * k3;
+                for (; remain>0; remain--)
+                {
+                    // TODO neon optimize
+                    float sum0 = *r0 * k0;
+                    float sum1 = *r0 * k1;
+                    float sum2 = *r0 * k2;
+                    float sum3 = *r0 * k3;
 
-                *outptr0 += sum0;
-                *outptr1 += sum1;
-                *outptr2 += sum2;
-                *outptr3 += sum3;
+                    *outptr0 += sum0;
+                    *outptr1 += sum1;
+                    *outptr2 += sum2;
+                    *outptr3 += sum3;
 
-                r0++;
-                outptr0++;
-                outptr1++;
-                outptr2++;
-                outptr3++;
+                    r0++;
+                    outptr0++;
+                    outptr1++;
+                    outptr2++;
+                    outptr3++;
+                }
             }
-        }
+#if __APPLE__
+        });
+#endif
     }
 
     remain_outch_start += nn_outch << 2;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int p=remain_outch_start; p<outch; p++)
     {
-        Mat out = top_blob.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            Mat out = top_blob.channel(p);
 
-        const float bias0 = bias ? bias[p] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
 
-        out.fill(bias0);
+            out.fill(bias0);
 
-        int q = 0;
+            int q = 0;
 
-        for (; q+3<inch; q+=4)
-        {
-            float* outptr = out;
+            for (; q+3<inch; q+=4)
+            {
+                float* outptr = out;
 
-            const float* img0 = bottom_blob.channel(q);
-            const float* img1 = bottom_blob.channel(q+1);
-            const float* img2 = bottom_blob.channel(q+2);
-            const float* img3 = bottom_blob.channel(q+3);
+                const float* img0 = bottom_blob.channel(q);
+                const float* img1 = bottom_blob.channel(q+1);
+                const float* img2 = bottom_blob.channel(q+2);
+                const float* img3 = bottom_blob.channel(q+3);
 
-            const float* kernel0 = kernel + p*inch + q;
-            const float k0 = kernel0[0];
-            const float k1 = kernel0[1];
-            const float k2 = kernel0[2];
-            const float k3 = kernel0[3];
+                const float* kernel0 = kernel + p*inch + q;
+                const float k0 = kernel0[0];
+                const float k1 = kernel0[1];
+                const float k2 = kernel0[2];
+                const float k3 = kernel0[3];
 
-            const float* r0 = img0;
-            const float* r1 = img1;
-            const float* r2 = img2;
-            const float* r3 = img3;
+                const float* r0 = img0;
+                const float* r1 = img1;
+                const float* r2 = img2;
+                const float* r3 = img3;
 
-            int size = outw * outh;
+                int size = outw * outh;
 
 #if __ARM_NEON
-            int nn = size >> 3;
+                int nn = size >> 3;
             int remain = size & 7;
 #else
-            int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-            float32x4_t _k0 = vdupq_n_f32(k0);
+                float32x4_t _k0 = vdupq_n_f32(k0);
             float32x4_t _k1 = vdupq_n_f32(k1);
             float32x4_t _k2 = vdupq_n_f32(k2);
             float32x4_t _k3 = vdupq_n_f32(k3);
@@ -3752,46 +3816,46 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                float sum = *r0 * k0;
-                float sum1 = *r1 * k1;
-                float sum2 = *r2 * k2;
-                float sum3 = *r3 * k3;
+                for (; remain>0; remain--)
+                {
+                    float sum = *r0 * k0;
+                    float sum1 = *r1 * k1;
+                    float sum2 = *r2 * k2;
+                    float sum3 = *r3 * k3;
 
-                *outptr += sum + sum1 + sum2 + sum3;
+                    *outptr += sum + sum1 + sum2 + sum3;
 
-                r0++;
-                r1++;
-                r2++;
-                r3++;
-                outptr++;
+                    r0++;
+                    r1++;
+                    r2++;
+                    r3++;
+                    outptr++;
+                }
+
             }
 
-        }
+            for (; q<inch; q++)
+            {
+                float* outptr = out;
 
-        for (; q<inch; q++)
-        {
-            float* outptr = out;
+                const float* img0 = bottom_blob.channel(q);
 
-            const float* img0 = bottom_blob.channel(q);
+                const float* kernel0 = kernel + p*inch  + q;
+                const float k0 = kernel0[0];
 
-            const float* kernel0 = kernel + p*inch  + q;
-            const float k0 = kernel0[0];
+                const float* r0 = img0;
 
-            const float* r0 = img0;
-
-            int size = outw * outh;
+                int size = outw * outh;
 
 #if __ARM_NEON
-            int nn = size >> 3;
+                int nn = size >> 3;
             int remain = size & 7;
 #else
-            int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-            float32x4_t _k0 = vdupq_n_f32(k0);
+                float32x4_t _k0 = vdupq_n_f32(k0);
 #if __aarch64__
             if (nn > 0)
             {
@@ -3848,17 +3912,20 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-            for (; remain>0; remain--)
-            {
-                float sum = *r0 * k0;
+                for (; remain>0; remain--)
+                {
+                    float sum = *r0 * k0;
 
-                *outptr += sum;
+                    *outptr += sum;
 
-                r0++;
-                outptr++;
+                    r0++;
+                    outptr++;
+                }
+
             }
-
-        }
+#if __APPLE__
+        });
+#endif
     }
 
 }
@@ -3880,63 +3947,66 @@ static void conv1x1s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     int nn_outch = outch >> 2;
     int remain_outch_start = nn_outch << 2;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int pp=0; pp<nn_outch; pp++)
     {
-        int p = pp * 4;
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            int p = pp * 4;
 
-        Mat out0 = top_blob.channel(p);
-        Mat out1 = top_blob.channel(p+1);
-        Mat out2 = top_blob.channel(p+2);
-        Mat out3 = top_blob.channel(p+3);
+            Mat out0 = top_blob.channel(p);
+            Mat out1 = top_blob.channel(p+1);
+            Mat out2 = top_blob.channel(p+2);
+            Mat out3 = top_blob.channel(p+3);
 
-        const float bias0 = bias ? bias[p] : 0.f;
-        const float bias1 = bias ? bias[p+1] : 0.f;
-        const float bias2 = bias ? bias[p+2] : 0.f;
-        const float bias3 = bias ? bias[p+3] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
+            const float bias1 = bias ? bias[p+1] : 0.f;
+            const float bias2 = bias ? bias[p+2] : 0.f;
+            const float bias3 = bias ? bias[p+3] : 0.f;
 
-        out0.fill(bias0);
-        out1.fill(bias1);
-        out2.fill(bias2);
-        out3.fill(bias3);
+            out0.fill(bias0);
+            out1.fill(bias1);
+            out2.fill(bias2);
+            out3.fill(bias3);
 
-        int q = 0;
+            int q = 0;
 
-        for (; q+3<inch; q+=4)
-        {
-            float* outptr0 = out0;
-            float* outptr1 = out1;
-            float* outptr2 = out2;
-            float* outptr3 = out3;
-
-            const float* img0 = bottom_blob.channel(q);
-            const float* img1 = bottom_blob.channel(q+1);
-            const float* img2 = bottom_blob.channel(q+2);
-            const float* img3 = bottom_blob.channel(q+3);
-
-            const float* kernel0 = kernel + p*inch + q;
-            const float* kernel1 = kernel + (p+1)*inch + q;
-            const float* kernel2 = kernel + (p+2)*inch + q;
-            const float* kernel3 = kernel + (p+3)*inch + q;
-
-            const float* r0 = img0;
-            const float* r1 = img1;
-            const float* r2 = img2;
-            const float* r3 = img3;
-
-            for (int i = 0; i < outh; i++)
+            for (; q+3<inch; q+=4)
             {
-                int size = outw;
+                float* outptr0 = out0;
+                float* outptr1 = out1;
+                float* outptr2 = out2;
+                float* outptr3 = out3;
+
+                const float* img0 = bottom_blob.channel(q);
+                const float* img1 = bottom_blob.channel(q+1);
+                const float* img2 = bottom_blob.channel(q+2);
+                const float* img3 = bottom_blob.channel(q+3);
+
+                const float* kernel0 = kernel + p*inch + q;
+                const float* kernel1 = kernel + (p+1)*inch + q;
+                const float* kernel2 = kernel + (p+2)*inch + q;
+                const float* kernel3 = kernel + (p+3)*inch + q;
+
+                const float* r0 = img0;
+                const float* r1 = img1;
+                const float* r2 = img2;
+                const float* r3 = img3;
+
+                for (int i = 0; i < outh; i++)
+                {
+                    int size = outw;
 
 #if __ARM_NEON
-                int nn = size >> 3;
+                    int nn = size >> 3;
                 int remain = size & 7;
 #else
-                int remain = size;
+                    int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                float32x4_t _k0 = vld1q_f32(kernel0);
+                    float32x4_t _k0 = vld1q_f32(kernel0);
                 float32x4_t _k1 = vld1q_f32(kernel1);
                 float32x4_t _k2 = vld1q_f32(kernel2);
                 float32x4_t _k3 = vld1q_f32(kernel3);
@@ -4190,70 +4260,70 @@ static void conv1x1s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    // TODO neon optimize
-                    float sum0 = *r0 * kernel0[0] + *r1 * kernel0[1] + *r2 * kernel0[2] + *r3 * kernel0[3];
-                    float sum1 = *r0 * kernel1[0] + *r1 * kernel1[1] + *r2 * kernel1[2] + *r3 * kernel1[3];
-                    float sum2 = *r0 * kernel2[0] + *r1 * kernel2[1] + *r2 * kernel2[2] + *r3 * kernel2[3];
-                    float sum3 = *r0 * kernel3[0] + *r1 * kernel3[1] + *r2 * kernel3[2] + *r3 * kernel3[3];
+                    for (; remain>0; remain--)
+                    {
+                        // TODO neon optimize
+                        float sum0 = *r0 * kernel0[0] + *r1 * kernel0[1] + *r2 * kernel0[2] + *r3 * kernel0[3];
+                        float sum1 = *r0 * kernel1[0] + *r1 * kernel1[1] + *r2 * kernel1[2] + *r3 * kernel1[3];
+                        float sum2 = *r0 * kernel2[0] + *r1 * kernel2[1] + *r2 * kernel2[2] + *r3 * kernel2[3];
+                        float sum3 = *r0 * kernel3[0] + *r1 * kernel3[1] + *r2 * kernel3[2] + *r3 * kernel3[3];
 
-                    *outptr0 += sum0;
-                    *outptr1 += sum1;
-                    *outptr2 += sum2;
-                    *outptr3 += sum3;
+                        *outptr0 += sum0;
+                        *outptr1 += sum1;
+                        *outptr2 += sum2;
+                        *outptr3 += sum3;
 
-                    r0 += 2;
-                    r1 += 2;
-                    r2 += 2;
-                    r3 += 2;
-                    outptr0++;
-                    outptr1++;
-                    outptr2++;
-                    outptr3++;
+                        r0 += 2;
+                        r1 += 2;
+                        r2 += 2;
+                        r3 += 2;
+                        outptr0++;
+                        outptr1++;
+                        outptr2++;
+                        outptr3++;
+                    }
+
+                    r0 += tailstep;
+                    r1 += tailstep;
+                    r2 += tailstep;
+                    r3 += tailstep;
                 }
-
-                r0 += tailstep;
-                r1 += tailstep;
-                r2 += tailstep;
-                r3 += tailstep;
             }
-        }
 
-        for (; q<inch; q++)
-        {
-            float* outptr0 = out0;
-            float* outptr1 = out1;
-            float* outptr2 = out2;
-            float* outptr3 = out3;
-
-            const float* img0 = bottom_blob.channel(q);
-
-            const float* kernel0 = kernel + p*inch + q;
-            const float* kernel1 = kernel + (p+1)*inch + q;
-            const float* kernel2 = kernel + (p+2)*inch + q;
-            const float* kernel3 = kernel + (p+3)*inch + q;
-
-            const float k0 = kernel0[0];
-            const float k1 = kernel1[0];
-            const float k2 = kernel2[0];
-            const float k3 = kernel3[0];
-
-            const float* r0 = img0;
-
-            for (int i = 0; i < outh; i++)
+            for (; q<inch; q++)
             {
-                int size = outw;
+                float* outptr0 = out0;
+                float* outptr1 = out1;
+                float* outptr2 = out2;
+                float* outptr3 = out3;
+
+                const float* img0 = bottom_blob.channel(q);
+
+                const float* kernel0 = kernel + p*inch + q;
+                const float* kernel1 = kernel + (p+1)*inch + q;
+                const float* kernel2 = kernel + (p+2)*inch + q;
+                const float* kernel3 = kernel + (p+3)*inch + q;
+
+                const float k0 = kernel0[0];
+                const float k1 = kernel1[0];
+                const float k2 = kernel2[0];
+                const float k3 = kernel3[0];
+
+                const float* r0 = img0;
+
+                for (int i = 0; i < outh; i++)
+                {
+                    int size = outw;
 
 #if __ARM_NEON
-                int nn = size >> 3;
+                    int nn = size >> 3;
                 int remain = size & 7;
 #else
-                int remain = size;
+                    int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                float32x4_t _k0 = vdupq_n_f32(k0);
+                    float32x4_t _k0 = vdupq_n_f32(k0);
                 float32x4_t _k1 = vdupq_n_f32(k1);
                 float32x4_t _k2 = vdupq_n_f32(k2);
                 float32x4_t _k3 = vdupq_n_f32(k3);
@@ -4384,73 +4454,79 @@ static void conv1x1s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    // TODO neon optimize
-                    float sum0 = *r0 * k0;
-                    float sum1 = *r0 * k1;
-                    float sum2 = *r0 * k2;
-                    float sum3 = *r0 * k3;
+                    for (; remain>0; remain--)
+                    {
+                        // TODO neon optimize
+                        float sum0 = *r0 * k0;
+                        float sum1 = *r0 * k1;
+                        float sum2 = *r0 * k2;
+                        float sum3 = *r0 * k3;
 
-                    *outptr0 += sum0;
-                    *outptr1 += sum1;
-                    *outptr2 += sum2;
-                    *outptr3 += sum3;
+                        *outptr0 += sum0;
+                        *outptr1 += sum1;
+                        *outptr2 += sum2;
+                        *outptr3 += sum3;
 
-                    r0 += 2;
-                    outptr0++;
-                    outptr1++;
-                    outptr2++;
-                    outptr3++;
+                        r0 += 2;
+                        outptr0++;
+                        outptr1++;
+                        outptr2++;
+                        outptr3++;
+                    }
+
+                    r0 += tailstep;
                 }
-
-                r0 += tailstep;
             }
-        }
+#if __APPLE__
+        });
+#endif
     }
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int p=remain_outch_start; p<outch; p++)
     {
-        Mat out = top_blob.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            Mat out = top_blob.channel(p);
 
-        const float bias0 = bias ? bias[p] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
 
-        out.fill(bias0);
+            out.fill(bias0);
 
-        int q = 0;
+            int q = 0;
 
-        for (; q+3<inch; q+=4)
-        {
-            float* outptr = out;
-
-            const float* img0 = bottom_blob.channel(q);
-            const float* img1 = bottom_blob.channel(q+1);
-            const float* img2 = bottom_blob.channel(q+2);
-            const float* img3 = bottom_blob.channel(q+3);
-
-            const float* kernel0 = kernel + p*inch + q;
-            const float k0 = kernel0[0];
-            const float k1 = kernel0[1];
-            const float k2 = kernel0[2];
-            const float k3 = kernel0[3];
-
-            const float* r0 = img0;
-            const float* r1 = img1;
-            const float* r2 = img2;
-            const float* r3 = img3;
-
-            for (int i = 0; i < outh; i++)
+            for (; q+3<inch; q+=4)
             {
+                float* outptr = out;
+
+                const float* img0 = bottom_blob.channel(q);
+                const float* img1 = bottom_blob.channel(q+1);
+                const float* img2 = bottom_blob.channel(q+2);
+                const float* img3 = bottom_blob.channel(q+3);
+
+                const float* kernel0 = kernel + p*inch + q;
+                const float k0 = kernel0[0];
+                const float k1 = kernel0[1];
+                const float k2 = kernel0[2];
+                const float k3 = kernel0[3];
+
+                const float* r0 = img0;
+                const float* r1 = img1;
+                const float* r2 = img2;
+                const float* r3 = img3;
+
+                for (int i = 0; i < outh; i++)
+                {
 #if __ARM_NEON
-                int nn = outw >> 3;
+                    int nn = outw >> 3;
                 int remain = outw & 7;
 #else
-                int remain = outw;
+                    int remain = outw;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                float32x4_t _k0 = vdupq_n_f32(k0);
+                    float32x4_t _k0 = vdupq_n_f32(k0);
                 float32x4_t _k1 = vdupq_n_f32(k1);
                 float32x4_t _k2 = vdupq_n_f32(k2);
                 float32x4_t _k3 = vdupq_n_f32(k3);
@@ -4568,52 +4644,52 @@ static void conv1x1s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    float sum = *r0 * k0;
-                    float sum1 = *r1 * k1;
-                    float sum2 = *r2 * k2;
-                    float sum3 = *r3 * k3;
+                    for (; remain>0; remain--)
+                    {
+                        float sum = *r0 * k0;
+                        float sum1 = *r1 * k1;
+                        float sum2 = *r2 * k2;
+                        float sum3 = *r3 * k3;
 
-                    *outptr += sum + sum1 + sum2 + sum3;
+                        *outptr += sum + sum1 + sum2 + sum3;
 
-                    r0 += 2;
-                    r1 += 2;
-                    r2 += 2;
-                    r3 += 2;
-                    outptr++;
+                        r0 += 2;
+                        r1 += 2;
+                        r2 += 2;
+                        r3 += 2;
+                        outptr++;
+                    }
+
+                    r0 += tailstep;
+                    r1 += tailstep;
+                    r2 += tailstep;
+                    r3 += tailstep;
                 }
 
-                r0 += tailstep;
-                r1 += tailstep;
-                r2 += tailstep;
-                r3 += tailstep;
             }
 
-        }
-
-        for (; q<inch; q++)
-        {
-            float* outptr = out;
-
-            const float* img0 = bottom_blob.channel(q);
-
-            const float* kernel0 = kernel + p*inch + q;
-            const float k0 = kernel0[0];
-
-            const float* r0 = img0;
-
-            for (int i = 0; i < outh; i++)
+            for (; q<inch; q++)
             {
+                float* outptr = out;
+
+                const float* img0 = bottom_blob.channel(q);
+
+                const float* kernel0 = kernel + p*inch + q;
+                const float k0 = kernel0[0];
+
+                const float* r0 = img0;
+
+                for (int i = 0; i < outh; i++)
+                {
 #if __ARM_NEON
-                int nn = outw >> 3;
+                    int nn = outw >> 3;
                 int remain = outw & 7;
 #else
-                int remain = outw;
+                    int remain = outw;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                float32x4_t _k0 = vdupq_n_f32(k0);
+                    float32x4_t _k0 = vdupq_n_f32(k0);
 #if __aarch64__
                 if (nn > 0)
                 {
@@ -4678,20 +4754,23 @@ static void conv1x1s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    float sum = *r0 * k0;
+                    for (; remain>0; remain--)
+                    {
+                        float sum = *r0 * k0;
 
-                    *outptr += sum;
+                        *outptr += sum;
 
-                    r0 += 2;
-                    outptr++;
+                        r0 += 2;
+                        outptr++;
+                    }
+
+                    r0 += tailstep;
                 }
 
-                r0 += tailstep;
             }
-
-        }
+#if __APPLE__
+        });
+#endif
     }
 
 }

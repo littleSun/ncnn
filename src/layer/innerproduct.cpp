@@ -16,76 +16,82 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(InnerProduct)
+    DEFINE_LAYER_CREATOR(InnerProduct)
 
-InnerProduct::InnerProduct()
-{
-    one_blob_only = true;
-    support_inplace = false;
-}
-
-int InnerProduct::load_param(const ParamDict& pd)
-{
-    num_output = pd.get(0, 0);
-    bias_term = pd.get(1, 0);
-    weight_data_size = pd.get(2, 0);
-
-    return 0;
-}
-
-int InnerProduct::load_model(const ModelBin& mb)
-{
-    weight_data = mb.load(weight_data_size, 0);
-    if (weight_data.empty())
-        return -100;
-
-    if (bias_term)
+    InnerProduct::InnerProduct()
     {
-        bias_data = mb.load(num_output, 1);
-        if (bias_data.empty())
-            return -100;
+        one_blob_only = true;
+        support_inplace = false;
     }
 
-    return 0;
-}
-
-int InnerProduct::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
-{
-    int w = bottom_blob.w;
-    int h = bottom_blob.h;
-    int channels = bottom_blob.c;
-    size_t elemsize = bottom_blob.elemsize;
-    int size = w * h;
-
-    top_blob.create(num_output, elemsize, opt.blob_allocator);
-    if (top_blob.empty())
-        return -100;
-
-    // num_output
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int p=0; p<num_output; p++)
+    int InnerProduct::load_param(const ParamDict& pd)
     {
-        float sum = 0.f;
+        num_output = pd.get(0, 0);
+        bias_term = pd.get(1, 0);
+        weight_data_size = pd.get(2, 0);
+
+        return 0;
+    }
+
+    int InnerProduct::load_model(const ModelBin& mb)
+    {
+        weight_data = mb.load(weight_data_size, 0);
+        if (weight_data.empty())
+            return -100;
 
         if (bias_term)
-            sum = bias_data[p];
-
-        // channels
-        for (int q=0; q<channels; q++)
         {
-            const float* w = (const float*)weight_data + size * channels * p + size * q;
-            const float* m = bottom_blob.channel(q);
-
-            for (int i = 0; i < size; i++)
-            {
-                sum += m[i] * w[i];
-            }
+            bias_data = mb.load(num_output, 1);
+            if (bias_data.empty())
+                return -100;
         }
 
-        top_blob[p] = sum;
+        return 0;
     }
 
-    return 0;
-}
+    int InnerProduct::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
+    {
+        int w = bottom_blob.w;
+        int h = bottom_blob.h;
+        int channels = bottom_blob.c;
+        size_t elemsize = bottom_blob.elemsize;
+        int size = w * h;
+
+        top_blob.create(num_output, elemsize, opt.blob_allocator);
+        if (top_blob.empty())
+            return -100;
+
+        // num_output
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int p=0; p<num_output; p++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                float sum = 0.f;
+
+                if (bias_term)
+                    sum = bias_data[p];
+
+                // channels
+                for (int q=0; q<channels; q++)
+                {
+                    const float* w = (const float*)weight_data + size * channels * p + size * q;
+                    const float* m = bottom_blob.channel(q);
+
+                    for (int i = 0; i < size; i++)
+                    {
+                        sum += m[i] * w[i];
+                    }
+                }
+
+                top_blob[p] = sum;
+#if __APPLE__
+            });
+#endif
+        }
+
+        return 0;
+    }
 
 } // namespace ncnn

@@ -20,29 +20,33 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(AbsVal_arm)
+    DEFINE_LAYER_CREATOR(AbsVal_arm)
 
-int AbsVal_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    int size = w * h;
-
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
+    int AbsVal_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
     {
-        float* ptr = bottom_top_blob.channel(q);
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        int size = w * h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int q=0; q<channels; q++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+
+                float* ptr = bottom_top_blob.channel(q);
 
 #if __ARM_NEON
-        int nn = size >> 2;
-        int remain = size - (nn << 2);
+                int nn = size >> 2;
+            int remain = size - (nn << 2);
 #else
-        int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                #if __aarch64__
         if (nn > 0)
         {
         asm volatile(
@@ -79,15 +83,18 @@ int AbsVal_arm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
         }
 #endif // __aarch64__
 #endif // __ARM_NEON
-        for (; remain>0; remain--)
-        {
-            *ptr = *ptr > 0 ? *ptr : -*ptr;
+                for (; remain>0; remain--)
+                {
+                    *ptr = *ptr > 0 ? *ptr : -*ptr;
 
-            ptr++;
+                    ptr++;
+                }
+#if __APPLE__
+            });
+#endif
         }
-    }
 
-    return 0;
-}
+        return 0;
+    }
 
 } // namespace ncnn

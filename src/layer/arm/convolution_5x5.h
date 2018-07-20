@@ -28,39 +28,42 @@ static void conv5x5s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     const float* kernel = _kernel;
     const float* bias = _bias;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int p=0; p<outch; p++)
     {
-        Mat out = top_blob.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            Mat out = top_blob.channel(p);
 
-        const float bias0 = bias ? bias[p] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
 
-        out.fill(bias0);
+            out.fill(bias0);
 
-        for (int q=0; q<inch; q++)
-        {
-            float* outptr = out;
-            float* outptr2 = outptr + outw;
+            for (int q=0; q<inch; q++)
+            {
+                float* outptr = out;
+                float* outptr2 = outptr + outw;
 
-            const float* img0 = bottom_blob.channel(q);
+                const float* img0 = bottom_blob.channel(q);
 
-            const float* kernel0 = kernel + p*inch*25  + q*25;
+                const float* kernel0 = kernel + p*inch*25  + q*25;
 
-            const float* r0 = img0;
-            const float* r1 = img0 + w;
-            const float* r2 = img0 + w*2;
-            const float* r3 = img0 + w*3;
-            const float* r4 = img0 + w*4;
-            const float* r5 = img0 + w*5;
+                const float* r0 = img0;
+                const float* r1 = img0 + w;
+                const float* r2 = img0 + w*2;
+                const float* r3 = img0 + w*3;
+                const float* r4 = img0 + w*4;
+                const float* r5 = img0 + w*5;
 
-            const float* k0 = kernel0;
-            const float* k1 = kernel0 + 5;
-            const float* k2 = kernel0 + 10;
-            const float* k3 = kernel0 + 15;
-            const float* k4 = kernel0 + 20;
+                const float* k0 = kernel0;
+                const float* k1 = kernel0 + 5;
+                const float* k2 = kernel0 + 10;
+                const float* k3 = kernel0 + 15;
+                const float* k4 = kernel0 + 20;
 
 #if __ARM_NEON
-            float32x4_t _k0123 = vld1q_f32(kernel0);
+                float32x4_t _k0123 = vld1q_f32(kernel0);
             float32x4_t _k4567 = vld1q_f32(kernel0+4);
             float32x4_t _k891011 = vld1q_f32(kernel0+8);
             float32x4_t _k12131415 = vld1q_f32(kernel0+12);
@@ -69,20 +72,20 @@ static void conv5x5s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
             float32x4_t _k24242424 = vdupq_n_f32(kernel0[24]);
 #endif // __ARM_NEON
 
-            int i = 0;
+                int i = 0;
 
-            for (; i+1 < outh; i+=2)
-            {
+                for (; i+1 < outh; i+=2)
+                {
 
 #if __ARM_NEON
-                int nn = outw >> 2;
+                    int nn = outw >> 2;
                 int remain = outw - (nn << 2);
 #else
-                int remain = outw;
+                    int remain = outw;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
                 if (nn > 0)
                 {
                 asm volatile(
@@ -476,12 +479,12 @@ static void conv5x5s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    float sum = 0;
-                    float sum2 = 0;
+                    for (; remain>0; remain--)
+                    {
+                        float sum = 0;
+                        float sum2 = 0;
 #if __ARM_NEON
-                    float32x4_t _r1 = vld1q_f32(r1);
+                        float32x4_t _r1 = vld1q_f32(r1);
                     float32x4_t _k1 = vld1q_f32(k1);
                     float32x4_t _sum = vmulq_f32(_r1, _k1);
                     float32x4_t _sum2 = vmulq_f32(_r1, _k0123);
@@ -534,102 +537,102 @@ static void conv5x5s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                     sum += vget_lane_f32(_ss_ss2, 0);
                     sum2 += vget_lane_f32(_ss_ss2, 1);
 #else
-                    sum += r0[0] * k0[0];
-                    sum += r0[1] * k0[1];
-                    sum += r0[2] * k0[2];
-                    sum += r0[3] * k0[3];
-                    sum += r0[4] * k0[4];
+                        sum += r0[0] * k0[0];
+                        sum += r0[1] * k0[1];
+                        sum += r0[2] * k0[2];
+                        sum += r0[3] * k0[3];
+                        sum += r0[4] * k0[4];
 
-                    sum += r1[0] * k1[0];
-                    sum += r1[1] * k1[1];
-                    sum += r1[2] * k1[2];
-                    sum += r1[3] * k1[3];
-                    sum += r1[4] * k1[4];
+                        sum += r1[0] * k1[0];
+                        sum += r1[1] * k1[1];
+                        sum += r1[2] * k1[2];
+                        sum += r1[3] * k1[3];
+                        sum += r1[4] * k1[4];
 
-                    sum += r2[0] * k2[0];
-                    sum += r2[1] * k2[1];
-                    sum += r2[2] * k2[2];
-                    sum += r2[3] * k2[3];
-                    sum += r2[4] * k2[4];
+                        sum += r2[0] * k2[0];
+                        sum += r2[1] * k2[1];
+                        sum += r2[2] * k2[2];
+                        sum += r2[3] * k2[3];
+                        sum += r2[4] * k2[4];
 
-                    sum += r3[0] * k3[0];
-                    sum += r3[1] * k3[1];
-                    sum += r3[2] * k3[2];
-                    sum += r3[3] * k3[3];
-                    sum += r3[4] * k3[4];
+                        sum += r3[0] * k3[0];
+                        sum += r3[1] * k3[1];
+                        sum += r3[2] * k3[2];
+                        sum += r3[3] * k3[3];
+                        sum += r3[4] * k3[4];
 
-                    sum += r4[0] * k4[0];
-                    sum += r4[1] * k4[1];
-                    sum += r4[2] * k4[2];
-                    sum += r4[3] * k4[3];
-                    sum += r4[4] * k4[4];
+                        sum += r4[0] * k4[0];
+                        sum += r4[1] * k4[1];
+                        sum += r4[2] * k4[2];
+                        sum += r4[3] * k4[3];
+                        sum += r4[4] * k4[4];
 
-                    sum2 += r1[0] * k0[0];
-                    sum2 += r1[1] * k0[1];
-                    sum2 += r1[2] * k0[2];
-                    sum2 += r1[3] * k0[3];
-                    sum2 += r1[4] * k0[4];
+                        sum2 += r1[0] * k0[0];
+                        sum2 += r1[1] * k0[1];
+                        sum2 += r1[2] * k0[2];
+                        sum2 += r1[3] * k0[3];
+                        sum2 += r1[4] * k0[4];
 
-                    sum2 += r2[0] * k1[0];
-                    sum2 += r2[1] * k1[1];
-                    sum2 += r2[2] * k1[2];
-                    sum2 += r2[3] * k1[3];
-                    sum2 += r2[4] * k1[4];
+                        sum2 += r2[0] * k1[0];
+                        sum2 += r2[1] * k1[1];
+                        sum2 += r2[2] * k1[2];
+                        sum2 += r2[3] * k1[3];
+                        sum2 += r2[4] * k1[4];
 
-                    sum2 += r3[0] * k2[0];
-                    sum2 += r3[1] * k2[1];
-                    sum2 += r3[2] * k2[2];
-                    sum2 += r3[3] * k2[3];
-                    sum2 += r3[4] * k2[4];
+                        sum2 += r3[0] * k2[0];
+                        sum2 += r3[1] * k2[1];
+                        sum2 += r3[2] * k2[2];
+                        sum2 += r3[3] * k2[3];
+                        sum2 += r3[4] * k2[4];
 
-                    sum2 += r4[0] * k3[0];
-                    sum2 += r4[1] * k3[1];
-                    sum2 += r4[2] * k3[2];
-                    sum2 += r4[3] * k3[3];
-                    sum2 += r4[4] * k3[4];
+                        sum2 += r4[0] * k3[0];
+                        sum2 += r4[1] * k3[1];
+                        sum2 += r4[2] * k3[2];
+                        sum2 += r4[3] * k3[3];
+                        sum2 += r4[4] * k3[4];
 
-                    sum2 += r5[0] * k4[0];
-                    sum2 += r5[1] * k4[1];
-                    sum2 += r5[2] * k4[2];
-                    sum2 += r5[3] * k4[3];
-                    sum2 += r5[4] * k4[4];
+                        sum2 += r5[0] * k4[0];
+                        sum2 += r5[1] * k4[1];
+                        sum2 += r5[2] * k4[2];
+                        sum2 += r5[3] * k4[3];
+                        sum2 += r5[4] * k4[4];
 #endif // __ARM_NEON
-                    *outptr += sum;
-                    *outptr2 += sum2;
+                        *outptr += sum;
+                        *outptr2 += sum2;
 
-                    r0++;
-                    r1++;
-                    r2++;
-                    r3++;
-                    r4++;
-                    r5++;
-                    outptr++;
-                    outptr2++;
+                        r0++;
+                        r1++;
+                        r2++;
+                        r3++;
+                        r4++;
+                        r5++;
+                        outptr++;
+                        outptr2++;
+                    }
+
+                    r0 += 4 + w;
+                    r1 += 4 + w;
+                    r2 += 4 + w;
+                    r3 += 4 + w;
+                    r4 += 4 + w;
+                    r5 += 4 + w;
+
+                    outptr += outw;
+                    outptr2 += outw;
                 }
 
-                r0 += 4 + w;
-                r1 += 4 + w;
-                r2 += 4 + w;
-                r3 += 4 + w;
-                r4 += 4 + w;
-                r5 += 4 + w;
-
-                outptr += outw;
-                outptr2 += outw;
-            }
-
-            for (; i < outh; i++)
-            {
+                for (; i < outh; i++)
+                {
 
 #if __ARM_NEON
-                int nn = outw >> 2;
+                    int nn = outw >> 2;
                 int remain = outw - (nn << 2);
 #else
-                int remain = outw;
+                    int remain = outw;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
                 if (nn > 0)
                 {
                 asm volatile(
@@ -889,11 +892,11 @@ static void conv5x5s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    float sum = 0;
+                    for (; remain>0; remain--)
+                    {
+                        float sum = 0;
 #if __ARM_NEON
-                    float32x4_t _r0 = vld1q_f32(r0);
+                        float32x4_t _r0 = vld1q_f32(r0);
                     float32x4_t _sum = vmulq_f32(_r0, _k0123);
 
                     float32x4_t _r1 = vld1q_f32(r1);
@@ -929,55 +932,58 @@ static void conv5x5s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
 
                     sum += vget_lane_f32(_ss, 0);
 #else
-                    sum += r0[0] * k0[0];
-                    sum += r0[1] * k0[1];
-                    sum += r0[2] * k0[2];
-                    sum += r0[3] * k0[3];
-                    sum += r0[4] * k0[4];
+                        sum += r0[0] * k0[0];
+                        sum += r0[1] * k0[1];
+                        sum += r0[2] * k0[2];
+                        sum += r0[3] * k0[3];
+                        sum += r0[4] * k0[4];
 
-                    sum += r1[0] * k1[0];
-                    sum += r1[1] * k1[1];
-                    sum += r1[2] * k1[2];
-                    sum += r1[3] * k1[3];
-                    sum += r1[4] * k1[4];
+                        sum += r1[0] * k1[0];
+                        sum += r1[1] * k1[1];
+                        sum += r1[2] * k1[2];
+                        sum += r1[3] * k1[3];
+                        sum += r1[4] * k1[4];
 
-                    sum += r2[0] * k2[0];
-                    sum += r2[1] * k2[1];
-                    sum += r2[2] * k2[2];
-                    sum += r2[3] * k2[3];
-                    sum += r2[4] * k2[4];
+                        sum += r2[0] * k2[0];
+                        sum += r2[1] * k2[1];
+                        sum += r2[2] * k2[2];
+                        sum += r2[3] * k2[3];
+                        sum += r2[4] * k2[4];
 
-                    sum += r3[0] * k3[0];
-                    sum += r3[1] * k3[1];
-                    sum += r3[2] * k3[2];
-                    sum += r3[3] * k3[3];
-                    sum += r3[4] * k3[4];
+                        sum += r3[0] * k3[0];
+                        sum += r3[1] * k3[1];
+                        sum += r3[2] * k3[2];
+                        sum += r3[3] * k3[3];
+                        sum += r3[4] * k3[4];
 
-                    sum += r4[0] * k4[0];
-                    sum += r4[1] * k4[1];
-                    sum += r4[2] * k4[2];
-                    sum += r4[3] * k4[3];
-                    sum += r4[4] * k4[4];
+                        sum += r4[0] * k4[0];
+                        sum += r4[1] * k4[1];
+                        sum += r4[2] * k4[2];
+                        sum += r4[3] * k4[3];
+                        sum += r4[4] * k4[4];
 #endif
-                    *outptr += sum;
+                        *outptr += sum;
 
-                    r0++;
-                    r1++;
-                    r2++;
-                    r3++;
-                    r4++;
-                    outptr++;
+                        r0++;
+                        r1++;
+                        r2++;
+                        r3++;
+                        r4++;
+                        outptr++;
+                    }
+
+                    r0 += 4;
+                    r1 += 4;
+                    r2 += 4;
+                    r3 += 4;
+                    r4 += 4;
+
                 }
 
-                r0 += 4;
-                r1 += 4;
-                r2 += 4;
-                r3 += 4;
-                r4 += 4;
-
             }
-
-        }
+#if __APPLE__
+        });
+#endif
     }
 
 }
@@ -996,37 +1002,40 @@ static void conv5x5s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     const float* kernel = _kernel;
     const float* bias = _bias;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int p=0; p<outch; p++)
     {
-        Mat out = top_blob.channel(p);
+#if __APPLE__
+        dispatch_async(get_gcd_concurrent(), ^{
+#endif
+            Mat out = top_blob.channel(p);
 
-        const float bias0 = bias ? bias[p] : 0.f;
+            const float bias0 = bias ? bias[p] : 0.f;
 
-        out.fill(bias0);
+            out.fill(bias0);
 
-        for (int q=0; q<inch; q++)
-        {
-            float* outptr = out;
+            for (int q=0; q<inch; q++)
+            {
+                float* outptr = out;
 
-            const float* img0 = bottom_blob.channel(q);
+                const float* img0 = bottom_blob.channel(q);
 
-            const float* kernel0 = kernel + p*inch*25  + q*25;
+                const float* kernel0 = kernel + p*inch*25  + q*25;
 
-            const float* r0 = img0;
-            const float* r1 = img0 + w;
-            const float* r2 = img0 + w*2;
-            const float* r3 = img0 + w*3;
-            const float* r4 = img0 + w*4;
+                const float* r0 = img0;
+                const float* r1 = img0 + w;
+                const float* r2 = img0 + w*2;
+                const float* r3 = img0 + w*3;
+                const float* r4 = img0 + w*4;
 
-            const float* k0 = kernel0;
-            const float* k1 = kernel0 + 5;
-            const float* k2 = kernel0 + 10;
-            const float* k3 = kernel0 + 15;
-            const float* k4 = kernel0 + 20;
+                const float* k0 = kernel0;
+                const float* k1 = kernel0 + 5;
+                const float* k2 = kernel0 + 10;
+                const float* k3 = kernel0 + 15;
+                const float* k4 = kernel0 + 20;
 
 #if __ARM_NEON
-            float32x4_t _k0123 = vld1q_f32(kernel0);
+                float32x4_t _k0123 = vld1q_f32(kernel0);
             float32x4_t _k4567 = vld1q_f32(kernel0+4);
             float32x4_t _k891011 = vld1q_f32(kernel0+8);
             float32x4_t _k12131415 = vld1q_f32(kernel0+12);
@@ -1035,18 +1044,18 @@ static void conv5x5s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
             float32x4_t _k24242424 = vdupq_n_f32(kernel0[24]);
 #endif // __ARM_NEON
 
-            for (int i = 0; i < outh; i++)
-            {
+                for (int i = 0; i < outh; i++)
+                {
 
 #if __ARM_NEON
-                int nn = outw >> 2;
+                    int nn = outw >> 2;
                 int remain = outw - (nn << 2);
 #else
-                int remain = outw;
+                    int remain = outw;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-#if __aarch64__
+                    #if __aarch64__
                 if (nn > 0)
                 {
                 asm volatile(
@@ -1340,11 +1349,11 @@ static void conv5x5s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
                 }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    float sum = 0;
+                    for (; remain>0; remain--)
+                    {
+                        float sum = 0;
 #if __ARM_NEON
-                    float32x4_t _r0 = vld1q_f32(r0);
+                        float32x4_t _r0 = vld1q_f32(r0);
                     float32x4_t _sum = vmulq_f32(_r0, _k0123);
 
                     float32x4_t _r1 = vld1q_f32(r1);
@@ -1370,54 +1379,57 @@ static void conv5x5s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
 
                     sum += vget_lane_f32(_ss, 0);
 #else
-                    sum += r0[0] * k0[0];
-                    sum += r0[1] * k0[1];
-                    sum += r0[2] * k0[2];
-                    sum += r0[3] * k0[3];
-                    sum += r0[4] * k0[4];
+                        sum += r0[0] * k0[0];
+                        sum += r0[1] * k0[1];
+                        sum += r0[2] * k0[2];
+                        sum += r0[3] * k0[3];
+                        sum += r0[4] * k0[4];
 
-                    sum += r1[0] * k1[0];
-                    sum += r1[1] * k1[1];
-                    sum += r1[2] * k1[2];
-                    sum += r1[3] * k1[3];
-                    sum += r1[4] * k1[4];
+                        sum += r1[0] * k1[0];
+                        sum += r1[1] * k1[1];
+                        sum += r1[2] * k1[2];
+                        sum += r1[3] * k1[3];
+                        sum += r1[4] * k1[4];
 
-                    sum += r2[0] * k2[0];
-                    sum += r2[1] * k2[1];
-                    sum += r2[2] * k2[2];
-                    sum += r2[3] * k2[3];
-                    sum += r2[4] * k2[4];
+                        sum += r2[0] * k2[0];
+                        sum += r2[1] * k2[1];
+                        sum += r2[2] * k2[2];
+                        sum += r2[3] * k2[3];
+                        sum += r2[4] * k2[4];
 
-                    sum += r3[0] * k3[0];
-                    sum += r3[1] * k3[1];
-                    sum += r3[2] * k3[2];
-                    sum += r3[3] * k3[3];
-                    sum += r3[4] * k3[4];
+                        sum += r3[0] * k3[0];
+                        sum += r3[1] * k3[1];
+                        sum += r3[2] * k3[2];
+                        sum += r3[3] * k3[3];
+                        sum += r3[4] * k3[4];
 
-                    sum += r4[0] * k4[0];
-                    sum += r4[1] * k4[1];
-                    sum += r4[2] * k4[2];
-                    sum += r4[3] * k4[3];
-                    sum += r4[4] * k4[4];
+                        sum += r4[0] * k4[0];
+                        sum += r4[1] * k4[1];
+                        sum += r4[2] * k4[2];
+                        sum += r4[3] * k4[3];
+                        sum += r4[4] * k4[4];
 #endif
-                    *outptr += sum;
+                        *outptr += sum;
 
-                    r0 += 2;
-                    r1 += 2;
-                    r2 += 2;
-                    r3 += 2;
-                    r4 += 2;
-                    outptr++;
+                        r0 += 2;
+                        r1 += 2;
+                        r2 += 2;
+                        r3 += 2;
+                        r4 += 2;
+                        outptr++;
+                    }
+
+                    r0 += tailstep;
+                    r1 += tailstep;
+                    r2 += tailstep;
+                    r3 += tailstep;
+                    r4 += tailstep;
                 }
 
-                r0 += tailstep;
-                r1 += tailstep;
-                r2 += tailstep;
-                r3 += tailstep;
-                r4 += tailstep;
             }
-
-        }
+#if __APPLE__
+        });
+#endif
     }
 
 }

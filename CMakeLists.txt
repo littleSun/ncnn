@@ -20,7 +20,7 @@ endif()
 
 project(ncnn)
 
-option(NCNN_OPENMP "openmp support" ON)
+option(NCNN_OPENMP "openmp support" OFF)
 option(NCNN_STDIO "load model from external file" ON)
 option(NCNN_STRING "plain and verbose string" ON)
 option(NCNN_OPENCV "minimal opencv structure emulation" OFF)
@@ -60,6 +60,9 @@ if(ANDROID)
     set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS FALSE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions")
 elseif(IOS)
+
+    add_definitions(-std=c++11)
+
     # disable shared library on xcode ios
     set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS FALSE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions")

@@ -16,51 +16,60 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Bias)
+    DEFINE_LAYER_CREATOR(Bias)
 
-Bias::Bias()
-{
-    one_blob_only = true;
-    support_inplace = true;
-}
-
-int Bias::load_param(const ParamDict& pd)
-{
-    bias_data_size = pd.get(0, 0);
-
-    return 0;
-}
-
-int Bias::load_model(const ModelBin& mb)
-{
-    bias_data = mb.load(bias_data_size, 1);
-    if (bias_data.empty())
-        return -100;
-
-    return 0;
-}
-
-int Bias::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    int size = w * h;
-
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
+    Bias::Bias()
     {
-        float* ptr = bottom_top_blob.channel(q);
-
-        float bias = bias_data[q];
-
-        for (int i=0; i<size; i++)
-        {
-            ptr[i] += bias;
-        }
+        one_blob_only = true;
+        support_inplace = true;
     }
 
-    return 0;
-}
+    int Bias::load_param(const ParamDict& pd)
+    {
+        bias_data_size = pd.get(0, 0);
+
+        return 0;
+    }
+
+    int Bias::load_model(const ModelBin& mb)
+    {
+        bias_data = mb.load(bias_data_size, 1);
+        if (bias_data.empty())
+            return -100;
+
+        return 0;
+    }
+
+    int Bias::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
+    {
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        int size = w * h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int q=0; q<channels; q++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+
+                float* ptr = bottom_top_blob.channel(q);
+
+                float bias = bias_data[q];
+
+                for (int i=0; i<size; i++)
+                {
+                    ptr[i] += bias;
+                }
+
+#if __APPLE__
+            });
+#endif
+
+        }
+
+        return 0;
+    }
 
 } // namespace ncnn

@@ -16,63 +16,69 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Reorg)
+    DEFINE_LAYER_CREATOR(Reorg)
 
-Reorg::Reorg()
-{
-    one_blob_only = true;
-    support_inplace = false;
-}
-
-int Reorg::load_param(const ParamDict& pd)
-{
-    stride = pd.get(0, 0);
-
-    return 0;
-}
-
-int Reorg::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
-{
-    int w = bottom_blob.w;
-    int h = bottom_blob.h;
-    int channels = bottom_blob.c;
-    size_t elemsize = bottom_blob.elemsize;
-
-    int outw = w / stride;
-    int outh = h / stride;
-    int outc = channels * stride * stride;
-
-    top_blob.create(outw, outh, outc, elemsize, opt.blob_allocator);
-    if (top_blob.empty())
-        return -100;
-
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
+    Reorg::Reorg()
     {
-        const Mat m = bottom_blob.channel(q);
-
-        for (int sh = 0; sh < stride; sh++)
-        {
-            for (int sw = 0; sw < stride; sw++)
-            {
-                float* outptr = top_blob.channel(q*stride*stride + sh*stride + sw);
-
-                for (int i = 0; i < outh; i++)
-                {
-                    const float* sptr = m.row(i*stride + sh) + sw;
-                    for (int j = 0; j < outw; j++)
-                    {
-                        outptr[0] = sptr[0];
-
-                        sptr += stride;
-                        outptr++;
-                    }
-                }
-            }
-        }
+        one_blob_only = true;
+        support_inplace = false;
     }
 
-    return 0;
-}
+    int Reorg::load_param(const ParamDict& pd)
+    {
+        stride = pd.get(0, 0);
+
+        return 0;
+    }
+
+    int Reorg::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
+    {
+        int w = bottom_blob.w;
+        int h = bottom_blob.h;
+        int channels = bottom_blob.c;
+        size_t elemsize = bottom_blob.elemsize;
+
+        int outw = w / stride;
+        int outh = h / stride;
+        int outc = channels * stride * stride;
+
+        top_blob.create(outw, outh, outc, elemsize, opt.blob_allocator);
+        if (top_blob.empty())
+            return -100;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+        for (int q=0; q<channels; q++)
+        {
+#if __APPLE__
+            dispatch_async(get_gcd_concurrent(), ^{
+#endif
+                const Mat m = bottom_blob.channel(q);
+
+                for (int sh = 0; sh < stride; sh++)
+                {
+                    for (int sw = 0; sw < stride; sw++)
+                    {
+                        float* outptr = top_blob.channel(q*stride*stride + sh*stride + sw);
+
+                        for (int i = 0; i < outh; i++)
+                        {
+                            const float* sptr = m.row(i*stride + sh) + sw;
+                            for (int j = 0; j < outw; j++)
+                            {
+                                outptr[0] = sptr[0];
+
+                                sptr += stride;
+                                outptr++;
+                            }
+                        }
+                    }
+                }
+#if __APPLE__
+            });
+#endif
+        }
+
+        return 0;
+    }
 
 } // namespace ncnn
