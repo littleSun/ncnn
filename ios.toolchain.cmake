@@ -176,6 +176,11 @@ set (CMAKE_FIND_ROOT_PATH_MODE_PROGRAM ONLY)
 set (CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set (CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 
+SET (CMAKE_AR      "/usr/bin/ar")
+SET (CMAKE_LINKER  "/usr/bin/ld")
+SET (CMAKE_NM      "/usr/bin/llvm-nm")
+SET (CMAKE_OBJDUMP "/usr/bin/llvm-objdump")
+SET (CMAKE_RANLIB  "/usr/bin/llvm-ranlib")
 
 # This little macro lets you set any XCode specific property
 macro (set_xcode_property TARGET XCODE_PROPERTY XCODE_VALUE)

@@ -34,7 +34,6 @@ static void conv2x2s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
 #else
         for (int p=0; p<outch; p++) {
 #endif
-        f
         Mat out = top_blob.channel(p);
 
         const float bias0 = bias ? bias[p] : 0.f;

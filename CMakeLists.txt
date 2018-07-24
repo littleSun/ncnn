@@ -61,7 +61,7 @@ if(ANDROID)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions")
 elseif(IOS)
 
-    add_definitions(-std=c++11 -Wno-narrowing)
+    add_definitions(-std=gnu++11 -Wno-narrowing)
 
     # disable shared library on xcode ios
     set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS FALSE)

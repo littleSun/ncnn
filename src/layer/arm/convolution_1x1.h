@@ -132,7 +132,7 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
     __block Mat tmp(8*4, inch/4+inch%4, size/8 + (size%8)/4 + size%4, 4u, opt.workspace_allocator);
 #else
     Mat tmp(8*4, inch/4+inch%4, size/8 + (size%8)/4 + size%4, 4u, opt.workspace_allocator);
-#endif
+#endif //__APPLE__
     {//1
         int nn_size = size >> 3;
         int remain_size_start = nn_size << 3;
@@ -141,8 +141,8 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
 #if __APPLE__
         dispatch_apply(nn_size, get_gcd_concurrent(), ^(size_t ii) {//2
 #else
-        for (int ii=0; ii<nn_size; ii++) {//2
-#endif
+            for (int ii=0; ii<nn_size; ii++) {//2
+#endif //__APPLE__
 
             int i = ii * 8;
 
@@ -193,7 +193,7 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
         });//2
 #else
         }//2
-#endif
+#endif //__APPLE__
 
         nn_size = (size - remain_size_start) >> 2;
 
@@ -201,8 +201,8 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
 #if __APPLE__
         dispatch_apply(nn_size, get_gcd_concurrent(), ^(size_t ii) {//2
 #else
-        for (int ii=0; ii<nn_size; ii++) {//2
-#endif
+            for (int ii=0; ii<nn_size; ii++) {//2
+#endif //__APPLE__
 
             int i = remain_size_start + ii * 4;
 
@@ -247,34 +247,34 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
         });//2
 #else
         }//2
-#endif
+#endif //__APPLE__
 
         remain_size_start += nn_size << 2;
 
 #pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-        dispatch_apply(size-remain_size_start, get_gcd_concurrent(), ^(size_t i_) {//2
+        dispatch_apply(size-remain_size_start, get_gcd_concurrent(), ^(size_t i_){//2
             int i = i_+remain_size_start;
 #else
             for (int i=remain_size_start; i<size; i++) {//2
-#endif
-            const float* img0 = bottom_blob.channel(0);
+#endif //__APPLE__
+            const float *img0 = bottom_blob.channel(0);
             img0 += i;
 
-            float* tmpptr = tmp.channel(i/8 + (i%8)/4 + i%4);
+            float *tmpptr = tmp.channel(i / 8 + (i % 8) / 4 + i % 4);
 
-            for (int q=0; q<inch; q++)
-            {//3
+            for (int q = 0; q < inch; q++) {//3
                 tmpptr[0] = img0[0];
                 tmpptr++;
                 img0 += bottom_blob.cstep;
             }//3
+
 #if __APPLE__
         });//2
 #else
         }//2
-#endif
-    }//1
+#endif //__APPLE__
+    }
 
     int nn_outch = 0;
     int remain_outch_start = 0;
@@ -283,12 +283,12 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
     nn_outch = outch >> 3;
     remain_outch_start = nn_outch << 3;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
       dispatch_apply(nn_outch, get_gcd_concurrent(), ^(size_t pp) {//1
 #else
       for (int pp=0; pp<nn_outch; pp++) {//1
-#endif
+#endif //__APPLE__
 
         int p = pp * 8;
 
@@ -763,8 +763,9 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
         }//2
 #if __APPLE__
     });//1
-#endif
+#else
     }//1
+#endif //__APPLE__
 #endif // __ARM_NEON && __aarch64__
 
     nn_outch = (outch - remain_outch_start) >> 2;
@@ -774,7 +775,7 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
     dispatch_apply(nn_outch, get_gcd_concurrent(), ^(size_t pp) { //1
 #else
      for (int pp=0; pp<nn_outch; pp++) { //1
-#endif
+#endif //__APPLE__
 
         int p = remain_outch_start + pp * 4;
 
@@ -1653,7 +1654,7 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
     });//1
 #else
     }//1
-#endif
+#endif //__APPLE__
 
     remain_outch_start += nn_outch << 2;
 
@@ -1663,7 +1664,7 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
         int p = p_+remain_outch_start;
 #else
         for (int p=remain_outch_start; p<outch; p++) {//1
-#endif
+#endif //__APPLE__
 
         Mat out0 = top_blob.channel(p);
 
@@ -2087,7 +2088,7 @@ static void conv1x1s1_sgemm_neon(const Mat& bottom_blob, Mat& top_blob, const Ma
     });//1
 #else
     }//1
-#endif
+#endif //__APPLE__
 
 //     // NOTE sgemm
 //     for (; p<outch; p++)
@@ -2141,7 +2142,7 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
       dispatch_apply(nn_outch, get_gcd_concurrent(), ^(size_t pp) { //1
 #else
       for (int pp=0; pp<nn_outch; pp++) { //1
-#endif
+#endif //__APPLE__
 
         int p = pp * 8;
 
@@ -2762,9 +2763,9 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
         }//2
 #if __APPLE__
         });//1
-#endif
-    }//1
 #else
+    }//1
+#endif //__APPLE__
 
     nn_outch = outch / 6;
     remain_outch_start = nn_outch * 6;
@@ -2774,7 +2775,7 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     dispatch_apply(nn_outch, get_gcd_concurrent(), ^(size_t pp) {//1
 #else
     for (int pp=0; pp<nn_outch; pp++) {//1
-#endif
+#endif //__APPLE__
 
         int p = pp * 6;
 
@@ -3163,7 +3164,7 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     });//1
 #else
     }//1
-#endif
+#endif //__APPLE__
 #endif // __ARM_NEON && __aarch64__
 
     nn_outch = (outch - remain_outch_start) >> 2;
@@ -3173,7 +3174,7 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     dispatch_apply(nn_outch, get_gcd_concurrent(), ^(size_t pp) {//1
 #else
     for (int pp=0; pp<nn_outch; pp++) {//1
-#endif
+#endif //__APPLE__
 
         int p = remain_outch_start + pp * 4;
 
@@ -3676,7 +3677,7 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     });
 #else
     }
-#endif
+#endif //__APPLE__
 
     remain_outch_start += nn_outch << 2;
 
@@ -3686,7 +3687,7 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
         int p = p_+remain_outch_start;
 #else
         for (int p=remain_outch_start; p<outch; p++) {
-#endif
+#endif //__APPLE__
 
         Mat out = top_blob.channel(p);
 
@@ -3943,7 +3944,7 @@ static void conv1x1s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     });
 #else
     }
-#endif
+#endif //__APPLE__
 
 }
 
@@ -3969,7 +3970,7 @@ static void conv1x1s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     dispatch_apply(nn_outch, get_gcd_concurrent(), ^(size_t pp) {
 #else
         for (int pp=0; pp<nn_outch; pp++) {
-#endif
+#endif //__APPLE__
 
         int p = pp * 4;
 
@@ -4499,7 +4500,7 @@ static void conv1x1s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     });
 #else
     }
-#endif
+#endif //__APPLE__
 
 
 #pragma omp parallel for num_threads(opt.num_threads)
@@ -4508,7 +4509,7 @@ static void conv1x1s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
         int p = p_+remain_outch_start;
 #else
         for (int p=remain_outch_start; p<outch; p++) {
-#endif
+#endif //__APPLE__
 
         Mat out = top_blob.channel(p);
 
@@ -4794,6 +4795,6 @@ static void conv1x1s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     });
 #else
     }
-#endif
+#endif //__APPLE__
 
 }
