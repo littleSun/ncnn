@@ -17,81 +17,83 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Embed)
+    DEFINE_LAYER_CREATOR(Embed)
 
-Embed::Embed()
-{
-    one_blob_only = true;
-    support_inplace = false;
-}
-
-int Embed::load_param(const ParamDict& pd)
-{
-    num_output = pd.get(0, 0);
-    input_dim = pd.get(1, 0);
-    bias_term = pd.get(2, 0);
-    weight_data_size = pd.get(3, 0);
-
-    return 0;
-}
-
-int Embed::load_model(const ModelBin& mb)
-{
-    weight_data = mb.load(weight_data_size, 0);
-    if (weight_data.empty())
-        return -100;
-
-    if (bias_term)
+    Embed::Embed()
     {
-        bias_data = mb.load(num_output, 1);
-        if (bias_data.empty())
-            return -100;
+        one_blob_only = true;
+        support_inplace = false;
     }
 
-    return 0;
-}
-
-int Embed::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
-{
-    int words = bottom_blob.total();
-
-    top_blob.create(num_output, words, 4u, opt.blob_allocator);
-    if (top_blob.empty())
-        return -100;
-
-    // num_output
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<words; q++)
+    int Embed::load_param(const ParamDict& pd)
     {
-#if __APPLE__
-        dispatch_async(get_gcd_concurrent(), ^{
-#endif
-        float* outptr = top_blob.row(q);
+        num_output = pd.get(0, 0);
+        input_dim = pd.get(1, 0);
+        bias_term = pd.get(2, 0);
+        weight_data_size = pd.get(3, 0);
 
-        int word_index = ((const int*)bottom_blob)[q];
+        return 0;
+    }
 
-        if (word_index < 0)
-            word_index = 0;
-        if (word_index >= input_dim)
-            word_index = input_dim - 1;
-
-        const float* em = (const float*)weight_data + num_output * word_index;
-
-        memcpy(outptr, em, num_output * sizeof(float));
+    int Embed::load_model(const ModelBin& mb)
+    {
+        weight_data = mb.load(weight_data_size, 0);
+        if (weight_data.empty())
+            return -100;
 
         if (bias_term)
         {
-            for (int p=0; p<num_output; p++)
-            {
-                outptr[p] += bias_data[p];
-            }
+            bias_data = mb.load(num_output, 1);
+            if (bias_data.empty())
+                return -100;
         }
-#if __APPLE__
-        });
-#endif
+
+        return 0;
     }
 
-    return 0;
-}
+    int Embed::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
+    {
+        int words = bottom_blob.total();
+
+        top_blob.create(num_output, words, 4u, opt.blob_allocator);
+        if (top_blob.empty())
+            return -100;
+
+        // num_output
+#pragma omp parallel for num_threads(opt.num_threads)
+#if __APPLE__
+        dispatch_apply(words, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<words; q++) {
+#endif
+
+            float* outptr = top_blob.row(q);
+
+            int word_index = ((const int*)bottom_blob)[q];
+
+            if (word_index < 0)
+                word_index = 0;
+            if (word_index >= input_dim)
+                word_index = input_dim - 1;
+
+            const float* em = (const float*)weight_data + num_output * word_index;
+
+            memcpy(outptr, em, num_output * sizeof(float));
+
+            if (bias_term)
+            {
+                for (int p=0; p<num_output; p++)
+                {
+                    outptr[p] += bias_data[p];
+                }
+            }
+#if __APPLE__
+        });
+#else
+        }
+#endif
+
+        return 0;
+    }
 
 } // namespace ncnn

@@ -120,39 +120,40 @@ namespace ncnn {
         if (channels == group && group == num_output)
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int g=0; g<group; g++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(group, get_gcd_concurrent(), ^(size_t g) {
+#else
+                for (int g=0; g<group; g++) {
 #endif
-                    const float* inptr = bottom_blob.channel(g);
-                    const float* kptr = (const float*)weight_data + maxk * g;
-                    Mat m = top_blob_bordered.channel(g);
 
-                    const float bias = bias_term ? bias_data[g] : 0.f;
+                const float* inptr = bottom_blob.channel(g);
+                const float* kptr = (const float*)weight_data + maxk * g;
+                Mat m = top_blob_bordered.channel(g);
 
-                    m.fill(bias);
+                const float bias = bias_term ? bias_data[g] : 0.f;
 
-                    for (int i = 0; i < h; i++)
+                m.fill(bias);
+
+                for (int i = 0; i < h; i++)
+                {
+                    for (int j = 0; j < w; j++)
                     {
-                        for (int j = 0; j < w; j++)
-                        {
-                            float* outptr = m.row(i*stride_h) + j*stride_w;
+                        float* outptr = m.row(i*stride_h) + j*stride_w;
 
-                            for (int k = 0; k < maxk; k++)
-                            {
-                                float val = inptr[i*w + j];
-                                float w = kptr[k];
-                                outptr[ space_ofs[k] ] += val * w;
-                            }
+                        for (int k = 0; k < maxk; k++)
+                        {
+                            float val = inptr[i*w + j];
+                            float w = kptr[k];
+                            outptr[ space_ofs[k] ] += val * w;
                         }
                     }
+                }
 
 #if __APPLE__
-                });
-#endif
-
+            });
+#else
             }
+#endif
         }
         else
         {
@@ -161,50 +162,51 @@ namespace ncnn {
             const int num_output_g = num_output / group;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int g = 0; g < group; g++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(group, get_gcd_concurrent(), ^(size_t g) {
+#else
+                for (int g = 0; g < group; g++) {
 #endif
-                    const float* weight_data_ptr = (const float*)weight_data + maxk * channels_g * num_output_g * g;
-                    for (int p = 0; p < num_output_g; p++)
+
+                const float* weight_data_ptr = (const float*)weight_data + maxk * channels_g * num_output_g * g;
+                for (int p = 0; p < num_output_g; p++)
+                {
+                    Mat out = top_blob_bordered.channel(g * num_output_g + p);
+
+                    const float bias = bias_term ? bias_data[g * num_output_g + p] : 0.f;
+
+                    out.fill(bias);
+
+                    for (int i = 0; i < h; i++)
                     {
-                        Mat out = top_blob_bordered.channel(g * num_output_g + p);
-
-                        const float bias = bias_term ? bias_data[g * num_output_g + p] : 0.f;
-
-                        out.fill(bias);
-
-                        for (int i = 0; i < h; i++)
+                        for (int j = 0; j < w; j++)
                         {
-                            for (int j = 0; j < w; j++)
+                            float* outptr = out.row(i*stride_h) + j*stride_w;
+
+                            const float* kptr = weight_data_ptr + maxk * channels_g * p;
+
+                            // channels_g
+                            for (int q = 0; q < channels_g; q++)
                             {
-                                float* outptr = out.row(i*stride_h) + j*stride_w;
+                                const Mat m = bottom_blob.channel(channels_g * g + q);
+                                float val = *(m.row(i) + j);
 
-                                const float* kptr = weight_data_ptr + maxk * channels_g * p;
-
-                                // channels_g
-                                for (int q = 0; q < channels_g; q++)
+                                for (int k = 0; k < maxk; k++)
                                 {
-                                    const Mat m = bottom_blob.channel(channels_g * g + q);
-                                    float val = *(m.row(i) + j);
-
-                                    for (int k = 0; k < maxk; k++)
-                                    {
-                                        outptr[ space_ofs[k] ] += val * kptr[k];
-                                    }
-
-                                    kptr += maxk;
+                                    outptr[ space_ofs[k] ] += val * kptr[k];
                                 }
+
+                                kptr += maxk;
                             }
                         }
                     }
+                }
 
 #if __APPLE__
-                });
-#endif
-
+            });
+#else
             }
+#endif
         }
 
         if (pad_w > 0 || pad_h > 0)

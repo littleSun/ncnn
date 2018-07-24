@@ -57,24 +57,26 @@ namespace ncnn {
             return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<channels; q++) {
 #endif
-                const float* ptr = bottom_blob.channel(q);
 
-                float s = 0.f;
-                for (int i=0; i<size; i++)
-                {
-                    s += ptr[i];
-                }
+            const float* ptr = bottom_blob.channel(q);
 
-                sum[q] = s;
+            float s = 0.f;
+            for (int i=0; i<size; i++)
+            {
+                s += ptr[i];
+            }
+
+            sum[q] = s;
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         if (across_channels)
         {
@@ -88,44 +90,48 @@ namespace ncnn {
 
             // subtract mean
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = bottom_blob.channel(q);
-                    float* outptr = top_blob.channel(q);
 
-                    for (int i=0; i<size; i++)
-                    {
-                        outptr[i] = ptr[i] - mean;
-                    }
+                const float* ptr = bottom_blob.channel(q);
+                float* outptr = top_blob.channel(q);
+
+                for (int i=0; i<size; i++)
+                {
+                    outptr[i] = ptr[i] - mean;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else
         {
             // subtract mean
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = bottom_blob.channel(q);
-                    float* outptr = top_blob.channel(q);
-                    float mean = sum[q] / size;
 
-                    for (int i=0; i<size; i++)
-                    {
-                        outptr[i] = ptr[i] - mean;
-                    }
+                const float* ptr = bottom_blob.channel(q);
+                float* outptr = top_blob.channel(q);
+                float mean = sum[q] / size;
+
+                for (int i=0; i<size; i++)
+                {
+                    outptr[i] = ptr[i] - mean;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         if (normalize_variance)
@@ -141,24 +147,26 @@ namespace ncnn {
                 return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = top_blob.channel(q);
 
-                    float s = 0.f;
-                    for (int i=0; i<size; i++)
-                    {
-                        s += ptr[i] * ptr[i];
-                    }
+                const float* ptr = top_blob.channel(q);
 
-                    sqsum[q] = s;
+                float s = 0.f;
+                for (int i=0; i<size; i++)
+                {
+                    s += ptr[i] * ptr[i];
+                }
+
+                sqsum[q] = s;
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
             if (across_channels)
             {
@@ -176,44 +184,48 @@ namespace ncnn {
 
                 // apply normalize_variance
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        float* outptr = top_blob.channel(q);
 
-                        for (int i=0; i<size; i++)
-                        {
-                            outptr[i] = outptr[i] * norm_var_inv;
-                        }
+                    float* outptr = top_blob.channel(q);
+
+                    for (int i=0; i<size; i++)
+                    {
+                        outptr[i] = outptr[i] * norm_var_inv;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
             else
             {
                 // apply normalize_variance
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        float* outptr = top_blob.channel(q);
-                        float sqmean = sqsum[q] / size;
-                        float norm_var = sqrt(sqmean) + eps;
-                        float norm_var_inv = 1.f / norm_var;
 
-                        for (int i=0; i<size; i++)
-                        {
-                            outptr[i] = outptr[i] * norm_var_inv;
-                        }
+                    float* outptr = top_blob.channel(q);
+                    float sqmean = sqsum[q] / size;
+                    float norm_var = sqrt(sqmean) + eps;
+                    float norm_var_inv = 1.f / norm_var;
+
+                    for (int i=0; i<size; i++)
+                    {
+                        outptr[i] = outptr[i] * norm_var_inv;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
 
         }

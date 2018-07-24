@@ -76,53 +76,55 @@ namespace ncnn {
 #endif
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int g=0; g<group; g++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(group, get_gcd_concurrent(), ^(size_t g) {
+#else
+                for (int g=0; g<group; g++) {
 #endif
-                    Mat bottom_blob_g(w, h, 1, bottom_blob.channel(g).data);
-                    Mat top_blob_bordered_g(outw, outh, 1, top_blob_bordered.channel(g));
-                    Mat weight_data_g(maxk, (void*)((const float*)weight_data + maxk * g));
 
-                    Mat bias_data_g;
-                    if (bias_term)
-                        bias_data_g = Mat(1, (void*)((const float*)bias_data + g));
+                Mat bottom_blob_g(w, h, 1, bottom_blob.channel(g).data);
+                Mat top_blob_bordered_g(outw, outh, 1, top_blob_bordered.channel(g));
+                Mat weight_data_g(maxk, (void*)((const float*)weight_data + maxk * g));
 
-                    // call Deconvolution
-                    ncnn::Layer* op = ncnn::create_layer(ncnn::LayerType::Deconvolution);
+                Mat bias_data_g;
+                if (bias_term)
+                    bias_data_g = Mat(1, (void*)((const float*)bias_data + g));
 
-                    // set param
-                    ncnn::ParamDict pd;
-                    pd.set(0, 1);// num_output
-                    pd.set(1, kernel_w);
-                    pd.set(11, kernel_h);
-                    pd.set(2, dilation_w);
-                    pd.set(12, dilation_h);
-                    pd.set(3, stride_w);
-                    pd.set(13, stride_h);
-                    pd.set(4, 0);// pad_w
-                    pd.set(14, 0);// pad_h
-                    pd.set(5, bias_term);
-                    pd.set(6, maxk);// weight_data_size
+                // call Deconvolution
+                ncnn::Layer* op = ncnn::create_layer(ncnn::LayerType::Deconvolution);
 
-                    op->load_param(pd);
+                // set param
+                ncnn::ParamDict pd;
+                pd.set(0, 1);// num_output
+                pd.set(1, kernel_w);
+                pd.set(11, kernel_h);
+                pd.set(2, dilation_w);
+                pd.set(12, dilation_h);
+                pd.set(3, stride_w);
+                pd.set(13, stride_h);
+                pd.set(4, 0);// pad_w
+                pd.set(14, 0);// pad_h
+                pd.set(5, bias_term);
+                pd.set(6, maxk);// weight_data_size
 
-                    // set weights
-                    ncnn::Mat weights[2];
-                    weights[0] = weight_data_g;
-                    weights[1] = bias_data_g;
+                op->load_param(pd);
 
-                    op->load_model(ModelBinFromMatArray(weights));
+                // set weights
+                ncnn::Mat weights[2];
+                weights[0] = weight_data_g;
+                weights[1] = bias_data_g;
 
-                    // forward
-                    op->forward(bottom_blob_g, top_blob_bordered_g, opt);
+                op->load_model(ModelBinFromMatArray(weights));
 
-                    delete op;
+                // forward
+                op->forward(bottom_blob_g, top_blob_bordered_g, opt);
+
+                delete op;
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
 #ifdef _OPENMP
             omp_set_nested(nested_current);

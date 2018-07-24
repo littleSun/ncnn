@@ -47,36 +47,38 @@ namespace ncnn {
             return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<channels; q++) {
 #endif
-                const Mat m = bottom_blob.channel(q);
 
-                for (int sh = 0; sh < stride; sh++)
+            const Mat m = bottom_blob.channel(q);
+
+            for (int sh = 0; sh < stride; sh++)
+            {
+                for (int sw = 0; sw < stride; sw++)
                 {
-                    for (int sw = 0; sw < stride; sw++)
+                    float* outptr = top_blob.channel(q*stride*stride + sh*stride + sw);
+
+                    for (int i = 0; i < outh; i++)
                     {
-                        float* outptr = top_blob.channel(q*stride*stride + sh*stride + sw);
-
-                        for (int i = 0; i < outh; i++)
+                        const float* sptr = m.row(i*stride + sh) + sw;
+                        for (int j = 0; j < outw; j++)
                         {
-                            const float* sptr = m.row(i*stride + sh) + sw;
-                            for (int j = 0; j < outw; j++)
-                            {
-                                outptr[0] = sptr[0];
+                            outptr[0] = sptr[0];
 
-                                sptr += stride;
-                                outptr++;
-                            }
+                            sptr += stride;
+                            outptr++;
                         }
                     }
                 }
+            }
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         return 0;
     }

@@ -49,45 +49,51 @@ namespace ncnn {
         {
             // first blob
             const Mat& bottom_blob1 = bottom_blobs[1];
-#pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
-#if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
-#endif
-                    const float* ptr = bottom_blob.channel(q);
-                    const float* ptr1 = bottom_blob1.channel(q);
-                    float* outptr = top_blob.channel(q);
 
-                    for (int i=0; i<size; i++)
-                    {
-                        outptr[i] = ptr[i] * ptr1[i];
-                    }
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-                });
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
+
+                const float* ptr = bottom_blob.channel(q);
+                const float* ptr1 = bottom_blob1.channel(q);
+                float* outptr = top_blob.channel(q);
+
+                for (int i=0; i<size; i++)
+                {
+                    outptr[i] = ptr[i] * ptr1[i];
+                }
+#if __APPLE__
+            });
+#else
             }
+#endif
 
             for (size_t b=2; b<bottom_blobs.size(); b++)
             {
                 const Mat& bottom_blob1 = bottom_blobs[b];
-#pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
-#if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
-#endif
-                        const float* ptr = bottom_blob1.channel(q);
-                        float* outptr = top_blob.channel(q);
 
-                        for (int i=0; i<size; i++)
-                        {
-                            outptr[i] *= ptr[i];
-                        }
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-                    });
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
+
+                    const float* ptr = bottom_blob1.channel(q);
+                    float* outptr = top_blob.channel(q);
+
+                    for (int i=0; i<size; i++)
+                    {
+                        outptr[i] *= ptr[i];
+                    }
+#if __APPLE__
+                });
+#else
                 }
+#endif
 
             }
         }
@@ -97,45 +103,50 @@ namespace ncnn {
             {
                 // first blob
                 const Mat& bottom_blob1 = bottom_blobs[1];
-#pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
-#if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
-#endif
-                        const float* ptr = bottom_blob.channel(q);
-                        const float* ptr1 = bottom_blob1.channel(q);
-                        float* outptr = top_blob.channel(q);
 
-                        for (int i=0; i<size; i++)
-                        {
-                            outptr[i] = ptr[i] + ptr1[i];
-                        }
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-                    });
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
+                    const float* ptr = bottom_blob.channel(q);
+                    const float* ptr1 = bottom_blob1.channel(q);
+                    float* outptr = top_blob.channel(q);
+
+                    for (int i=0; i<size; i++)
+                    {
+                        outptr[i] = ptr[i] + ptr1[i];
+                    }
+#if __APPLE__
+                });
+#else
                 }
+#endif
 
                 for (size_t b=2; b<bottom_blobs.size(); b++)
                 {
                     const Mat& bottom_blob1 = bottom_blobs[b];
-#pragma omp parallel for num_threads(opt.num_threads)
-                    for (int q=0; q<channels; q++)
-                    {
-#if __APPLE__
-                        dispatch_async(get_gcd_concurrent(), ^{
-#endif
-                            const float* ptr = bottom_blob1.channel(q);
-                            float* outptr = top_blob.channel(q);
 
-                            for (int i=0; i<size; i++)
-                            {
-                                outptr[i] += ptr[i];
-                            }
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-                        });
+                    dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                        for (int q=0; q<channels; q++) {
 #endif
+
+                        const float* ptr = bottom_blob1.channel(q);
+                        float* outptr = top_blob.channel(q);
+
+                        for (int i=0; i<size; i++)
+                        {
+                            outptr[i] += ptr[i];
+                        }
+#if __APPLE__
+                    });
+#else
                     }
+#endif
                 }
             }
             else
@@ -144,47 +155,52 @@ namespace ncnn {
                 const Mat& bottom_blob1 = bottom_blobs[1];
                 float coeff0 = coeffs[0];
                 float coeff1 = coeffs[1];
+
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
-
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        const float* ptr = bottom_blob.channel(q);
-                        const float* ptr1 = bottom_blob1.channel(q);
-                        float* outptr = top_blob.channel(q);
 
-                        for (int i=0; i<size; i++)
-                        {
-                            outptr[i] = ptr[i] * coeff0 + ptr1[i] * coeff1;
-                        }
+                    const float* ptr = bottom_blob.channel(q);
+                    const float* ptr1 = bottom_blob1.channel(q);
+                    float* outptr = top_blob.channel(q);
+
+                    for (int i=0; i<size; i++)
+                    {
+                        outptr[i] = ptr[i] * coeff0 + ptr1[i] * coeff1;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
 
                 for (size_t b=2; b<bottom_blobs.size(); b++)
                 {
                     const Mat& bottom_blob1 = bottom_blobs[b];
                     float coeff = coeffs[b];
-#pragma omp parallel for num_threads(opt.num_threads)
-                    for (int q=0; q<channels; q++)
-                    {
-#if __APPLE__
-                        dispatch_async(get_gcd_concurrent(), ^{
-#endif
-                            const float* ptr = bottom_blob1.channel(q);
-                            float* outptr = top_blob.channel(q);
 
-                            for (int i=0; i<size; i++)
-                            {
-                                outptr[i] += ptr[i] * coeff;
-                            }
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-                        });
+                    dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                        for (int q=0; q<channels; q++) {
 #endif
+
+                        const float* ptr = bottom_blob1.channel(q);
+                        float* outptr = top_blob.channel(q);
+
+                        for (int i=0; i<size; i++)
+                        {
+                            outptr[i] += ptr[i] * coeff;
+                        }
+#if __APPLE__
+                    });
+#else
                     }
+#endif
                 }
             }
         }
@@ -192,45 +208,51 @@ namespace ncnn {
         {
             // first blob
             const Mat& bottom_blob1 = bottom_blobs[1];
-#pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
-#if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
-#endif
-                    const float* ptr = bottom_blob.channel(q);
-                    const float* ptr1 = bottom_blob1.channel(q);
-                    float* outptr = top_blob.channel(q);
 
-                    for (int i=0; i<size; i++)
-                    {
-                        outptr[i] = std::max(ptr[i], ptr1[i]);
-                    }
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-                });
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
+
+                const float* ptr = bottom_blob.channel(q);
+                const float* ptr1 = bottom_blob1.channel(q);
+                float* outptr = top_blob.channel(q);
+
+                for (int i=0; i<size; i++)
+                {
+                    outptr[i] = std::max(ptr[i], ptr1[i]);
+                }
+#if __APPLE__
+            });
+#else
             }
+#endif
 
             for (size_t b=2; b<bottom_blobs.size(); b++)
             {
                 const Mat& bottom_blob1 = bottom_blobs[b];
-#pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
-#if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
-#endif
-                        const float* ptr = bottom_blob1.channel(q);
-                        float* outptr = top_blob.channel(q);
 
-                        for (int i=0; i<size; i++)
-                        {
-                            outptr[i] = std::max(outptr[i], ptr[i]);
-                        }
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-                    });
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
+
+                    const float* ptr = bottom_blob1.channel(q);
+                    float* outptr = top_blob.channel(q);
+
+                    for (int i=0; i<size; i++)
+                    {
+                        outptr[i] = std::max(outptr[i], ptr[i]);
+                    }
+#if __APPLE__
+                });
+#else
                 }
+#endif
             }
         }
 

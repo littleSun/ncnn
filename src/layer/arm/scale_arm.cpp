@@ -38,25 +38,26 @@ namespace ncnn {
             const float* scale_ptr = scale_data;
             const float* bias_ptr = bias_data;
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float* ptr = bottom_top_blob.channel(q);
 
-                    float s = scale_ptr[q];
-                    float bias = bias_ptr[q];
+                float* ptr = bottom_top_blob.channel(q);
+
+                float s = scale_ptr[q];
+                float bias = bias_ptr[q];
 
 #if __ARM_NEON
-                    int nn = size >> 2;
+                int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-                    int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                    float32x4_t _s = vdupq_n_f32(s);
+                float32x4_t _s = vdupq_n_f32(s);
             float32x4_t _bias = vdupq_n_f32(bias);
             for (; nn>0; nn--)
             {
@@ -68,39 +69,42 @@ namespace ncnn {
             }
 #endif // __ARM_NEON
 
-                    for (; remain>0; remain--)
-                    {
-                        *ptr = *ptr * s + bias;
+                for (; remain>0; remain--)
+                {
+                    *ptr = *ptr * s + bias;
 
-                        ptr++;
-                    }
+                    ptr++;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else
         {
             const float* scale_ptr = scale_data;
-#pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
-#if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
-#endif
-                    float* ptr = bottom_top_blob.channel(q);
 
-                    float s = scale_ptr[q];
+#pragma omp parallel for num_threads(opt.num_threads)
+#if __APPLE__
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
+#endif
+
+                float* ptr = bottom_top_blob.channel(q);
+
+                float s = scale_ptr[q];
 
 #if __ARM_NEON
-                    int nn = size >> 2;
+                int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-                    int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                    float32x4_t _s = vdupq_n_f32(s);
+                float32x4_t _s = vdupq_n_f32(s);
             for (; nn>0; nn--)
             {
                 float32x4_t _p = vld1q_f32(ptr);
@@ -111,16 +115,17 @@ namespace ncnn {
             }
 #endif // __ARM_NEON
 
-                    for (; remain>0; remain--)
-                    {
-                        *ptr *= s;
+                for (; remain>0; remain--)
+                {
+                    *ptr *= s;
 
-                        ptr++;
-                    }
+                    ptr++;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         return 0;

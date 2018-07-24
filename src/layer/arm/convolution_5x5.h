@@ -29,11 +29,12 @@ static void conv5x5s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     const float* bias = _bias;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-    for (int p=0; p<outch; p++)
-    {
 #if __APPLE__
-        dispatch_async(get_gcd_concurrent(), ^{
+    dispatch_apply(outch, get_gcd_concurrent(), ^(size_t p) {
+#else
+     for (int p=0; p<outch; p++) {
 #endif
+
             Mat out = top_blob.channel(p);
 
             const float bias0 = bias ? bias[p] : 0.f;
@@ -982,9 +983,10 @@ static void conv5x5s1_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
 
             }
 #if __APPLE__
-        });
-#endif
+    });
+#else
     }
+#endif
 
 }
 
@@ -1003,11 +1005,13 @@ static void conv5x5s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     const float* bias = _bias;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-    for (int p=0; p<outch; p++)
-    {
+
 #if __APPLE__
-        dispatch_async(get_gcd_concurrent(), ^{
+    dispatch_apply(outch, get_gcd_concurrent(), ^(size_t p) {
+#else
+    for (int p=0; p<outch; p++) {
 #endif
+
             Mat out = top_blob.channel(p);
 
             const float bias0 = bias ? bias[p] : 0.f;
@@ -1428,8 +1432,9 @@ static void conv5x5s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
 
             }
 #if __APPLE__
-        });
-#endif
+    });
+#else
     }
+#endif
 
 }

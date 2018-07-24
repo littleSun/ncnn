@@ -240,21 +240,23 @@ namespace ncnn {
             }
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float* ptr = bottom_top_blob.channel(q);
 
-                    for (int i=0; i<size; i++)
-                    {
-                        ptr[i] = exp(ptr[i] - max[i]);
-                    }
+                float* ptr = bottom_top_blob.channel(q);
+
+                for (int i=0; i<size; i++)
+                {
+                    ptr[i] = exp(ptr[i] - max[i]);
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
             Mat sum;
             sum.create(w, h, elemsize, opt.workspace_allocator);
@@ -272,21 +274,23 @@ namespace ncnn {
             }
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float* ptr = bottom_top_blob.channel(q);
 
-                    for (int i=0; i<size; i++)
-                    {
-                        ptr[i] /= sum[i];
-                    }
+                float* ptr = bottom_top_blob.channel(q);
+
+                for (int i=0; i<size; i++)
+                {
+                    ptr[i] /= sum[i];
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
             return 0;
         }
@@ -310,53 +314,57 @@ namespace ncnn {
                 return -100;
             max.fill(-FLT_MAX);
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = bottom_top_blob.channel(q);
-                    float* maxptr = max.row(q);
 
-                    for (int i=0; i<h; i++)
+                const float* ptr = bottom_top_blob.channel(q);
+                float* maxptr = max.row(q);
+
+                for (int i=0; i<h; i++)
+                {
+                    float max = -FLT_MAX;
+                    for (int j=0; j<w; j++)
                     {
-                        float max = -FLT_MAX;
-                        for (int j=0; j<w; j++)
-                        {
-                            max = std::max(max, ptr[j]);
-                        }
-
-                        maxptr[i] = max;
-                        ptr += w;
+                        max = std::max(max, ptr[j]);
                     }
+
+                    maxptr[i] = max;
+                    ptr += w;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float* ptr = bottom_top_blob.channel(q);
-                    float* maxptr = max.row(q);
 
-                    for (int i=0; i<h; i++)
+                float* ptr = bottom_top_blob.channel(q);
+                float* maxptr = max.row(q);
+
+                for (int i=0; i<h; i++)
+                {
+                    float max = maxptr[i];
+                    for (int j=0; j<w; j++)
                     {
-                        float max = maxptr[i];
-                        for (int j=0; j<w; j++)
-                        {
-                            ptr[j] = exp(ptr[j] - max);
-                        }
-
-                        ptr += w;
+                        ptr[j] = exp(ptr[j] - max);
                     }
+
+                    ptr += w;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
 #if __APPLE__
             __block Mat sum;
@@ -369,53 +377,57 @@ namespace ncnn {
                 return -100;
             sum.fill(0.f);
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = bottom_top_blob.channel(q);
-                    float* sumptr = sum.row(q);
 
-                    for (int i=0; i<h; i++)
+                const float* ptr = bottom_top_blob.channel(q);
+                float* sumptr = sum.row(q);
+
+                for (int i=0; i<h; i++)
+                {
+                    float sum = 0.f;
+                    for (int j=0; j<w; j++)
                     {
-                        float sum = 0.f;
-                        for (int j=0; j<w; j++)
-                        {
-                            sum += ptr[j];
-                        }
-
-                        sumptr[i] = sum;
-                        ptr += w;
+                        sum += ptr[j];
                     }
+
+                    sumptr[i] = sum;
+                    ptr += w;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float* ptr = bottom_top_blob.channel(q);
-                    float* sumptr = sum.row(q);
 
-                    for (int i=0; i<h; i++)
+                float* ptr = bottom_top_blob.channel(q);
+                float* sumptr = sum.row(q);
+
+                for (int i=0; i<h; i++)
+                {
+                    float sum = sumptr[i];
+                    for (int j=0; j<w; j++)
                     {
-                        float sum = sumptr[i];
-                        for (int j=0; j<w; j++)
-                        {
-                            ptr[j] /= sum;
-                        }
-
-                        ptr += w;
+                        ptr[j] /= sum;
                     }
+
+                    ptr += w;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
             return 0;
         }
@@ -437,50 +449,54 @@ namespace ncnn {
                 return -100;
             max.fill(-FLT_MAX);
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = bottom_top_blob.channel(q);
-                    float* maxptr = max.row(q);
 
-                    for (int i=0; i<h; i++)
+                const float* ptr = bottom_top_blob.channel(q);
+                float* maxptr = max.row(q);
+
+                for (int i=0; i<h; i++)
+                {
+                    for (int j=0; j<w; j++)
                     {
-                        for (int j=0; j<w; j++)
-                        {
-                            maxptr[j] = std::max(maxptr[j], ptr[j]);
-                        }
-
-                        ptr += w;
+                        maxptr[j] = std::max(maxptr[j], ptr[j]);
                     }
+
+                    ptr += w;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float* ptr = bottom_top_blob.channel(q);
-                    float* maxptr = max.row(q);
 
-                    for (int i=0; i<h; i++)
+                float* ptr = bottom_top_blob.channel(q);
+                float* maxptr = max.row(q);
+
+                for (int i=0; i<h; i++)
+                {
+                    for (int j=0; j<w; j++)
                     {
-                        for (int j=0; j<w; j++)
-                        {
-                            ptr[j] = exp(ptr[j] - maxptr[j]);
-                        }
-
-                        ptr += w;
+                        ptr[j] = exp(ptr[j] - maxptr[j]);
                     }
+
+                    ptr += w;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
 #if __APPLE__
             __block Mat sum;
@@ -493,50 +509,54 @@ namespace ncnn {
                 return -100;
             sum.fill(0.f);
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = bottom_top_blob.channel(q);
-                    float* sumptr = sum.row(q);
 
-                    for (int i=0; i<h; i++)
+                const float* ptr = bottom_top_blob.channel(q);
+                float* sumptr = sum.row(q);
+
+                for (int i=0; i<h; i++)
+                {
+                    for (int j=0; j<w; j++)
                     {
-                        for (int j=0; j<w; j++)
-                        {
-                            sumptr[j] += ptr[j];
-                        }
-
-                        ptr += w;
+                        sumptr[j] += ptr[j];
                     }
+
+                    ptr += w;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float* ptr = bottom_top_blob.channel(q);
-                    float* sumptr = sum.row(q);
 
-                    for (int i=0; i<h; i++)
+                float* ptr = bottom_top_blob.channel(q);
+                float* sumptr = sum.row(q);
+
+                for (int i=0; i<h; i++)
+                {
+                    for (int j=0; j<w; j++)
                     {
-                        for (int j=0; j<w; j++)
-                        {
-                            ptr[j] /= sumptr[j];
-                        }
-
-                        ptr += w;
+                        ptr[j] /= sumptr[j];
                     }
+
+                    ptr += w;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
             return 0;
         }

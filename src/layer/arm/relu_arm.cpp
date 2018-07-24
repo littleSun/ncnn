@@ -32,22 +32,23 @@ namespace ncnn {
         if (slope == 0.f)
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float* ptr = bottom_top_blob.channel(q);
+
+                float* ptr = bottom_top_blob.channel(q);
 
 #if __ARM_NEON
-                    int nn = size >> 2;
+                int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-                    int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                    #if __aarch64__
+                #if __aarch64__
             float32x4_t _zero = vdupq_n_f32(0.f);
             for (; nn>0; nn--)
             {
@@ -78,36 +79,38 @@ namespace ncnn {
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                    for (; remain>0; remain--)
-                    {
-                        *ptr = std::max(*ptr, 0.f);
+                for (; remain>0; remain--)
+                {
+                    *ptr = std::max(*ptr, 0.f);
 
-                        ptr++;
-                    }
+                    ptr++;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float* ptr = bottom_top_blob.channel(q);
+
+                float* ptr = bottom_top_blob.channel(q);
 
 #if __ARM_NEON
-                    int nn = size >> 2;
+                int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-                    int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                    #if __aarch64__
+                #if __aarch64__
             float32x4_t _zero = vdupq_n_f32(0.f);
             float32x4_t _slope = vdupq_n_f32(slope);
             for (; nn>0; nn--)
@@ -145,17 +148,18 @@ namespace ncnn {
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                    for (; remain>0; remain--)
-                    {
-                        if (*ptr < 0)
-                            *ptr *= slope;
+                for (; remain>0; remain--)
+                {
+                    if (*ptr < 0)
+                        *ptr *= slope;
 
-                        ptr++;
-                    }
+                    ptr++;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         return 0;

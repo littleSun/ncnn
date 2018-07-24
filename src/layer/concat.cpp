@@ -16,116 +16,117 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Concat)
+    DEFINE_LAYER_CREATOR(Concat)
 
-Concat::Concat()
-{
-    one_blob_only = false;
-    support_inplace = false;
-}
-
-int Concat::load_param(const ParamDict& pd)
-{
-    axis = pd.get(0, 0);
-
-    return 0;
-}
-
-int Concat::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_blobs, const Option& opt) const
-{
-    int dims = bottom_blobs[0].dims;
-    size_t elemsize = bottom_blobs[0].elemsize;
-
-    if (dims == 1) // axis == 0
+    Concat::Concat()
     {
-        // concat vector
-        // total length
-        int top_w = 0;
-        for (size_t b=0; b<bottom_blobs.size(); b++)
-        {
-            const Mat& bottom_blob = bottom_blobs[b];
-            top_w += bottom_blob.w;
-        }
+        one_blob_only = false;
+        support_inplace = false;
+    }
 
-        Mat& top_blob = top_blobs[0];
-        top_blob.create(top_w, elemsize, opt.blob_allocator);
-        if (top_blob.empty())
-            return -100;
-
-        float* outptr = top_blob;
-        for (size_t b=0; b<bottom_blobs.size(); b++)
-        {
-            const Mat& bottom_blob = bottom_blobs[b];
-
-            int w = bottom_blob.w;
-
-            const float* ptr = bottom_blob;
-            memcpy(outptr, ptr, w * elemsize);
-
-            outptr += w;
-        }
+    int Concat::load_param(const ParamDict& pd)
+    {
+        axis = pd.get(0, 0);
 
         return 0;
     }
 
-    if (dims == 2 && axis == 0)
+    int Concat::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_blobs, const Option& opt) const
     {
-        // concat image
-        int w = bottom_blobs[0].w;
+        int dims = bottom_blobs[0].dims;
+        size_t elemsize = bottom_blobs[0].elemsize;
 
-        // total height
-        int top_h = 0;
-        for (size_t b=0; b<bottom_blobs.size(); b++)
+        if (dims == 1) // axis == 0
         {
-            const Mat& bottom_blob = bottom_blobs[b];
-            top_h += bottom_blob.h;
+            // concat vector
+            // total length
+            int top_w = 0;
+            for (size_t b=0; b<bottom_blobs.size(); b++)
+            {
+                const Mat& bottom_blob = bottom_blobs[b];
+                top_w += bottom_blob.w;
+            }
+
+            Mat& top_blob = top_blobs[0];
+            top_blob.create(top_w, elemsize, opt.blob_allocator);
+            if (top_blob.empty())
+                return -100;
+
+            float* outptr = top_blob;
+            for (size_t b=0; b<bottom_blobs.size(); b++)
+            {
+                const Mat& bottom_blob = bottom_blobs[b];
+
+                int w = bottom_blob.w;
+
+                const float* ptr = bottom_blob;
+                memcpy(outptr, ptr, w * elemsize);
+
+                outptr += w;
+            }
+
+            return 0;
         }
 
-        Mat& top_blob = top_blobs[0];
-        top_blob.create(w, top_h, elemsize, opt.blob_allocator);
-        if (top_blob.empty())
-            return -100;
-
-        float* outptr = top_blob;
-        for (size_t b=0; b<bottom_blobs.size(); b++)
+        if (dims == 2 && axis == 0)
         {
-            const Mat& bottom_blob = bottom_blobs[b];
+            // concat image
+            int w = bottom_blobs[0].w;
 
-            int size = w * bottom_blob.h;
+            // total height
+            int top_h = 0;
+            for (size_t b=0; b<bottom_blobs.size(); b++)
+            {
+                const Mat& bottom_blob = bottom_blobs[b];
+                top_h += bottom_blob.h;
+            }
 
-            const float* ptr = bottom_blob;
-            memcpy(outptr, ptr, size * elemsize);
+            Mat& top_blob = top_blobs[0];
+            top_blob.create(w, top_h, elemsize, opt.blob_allocator);
+            if (top_blob.empty())
+                return -100;
 
-            outptr += size;
+            float* outptr = top_blob;
+            for (size_t b=0; b<bottom_blobs.size(); b++)
+            {
+                const Mat& bottom_blob = bottom_blobs[b];
+
+                int size = w * bottom_blob.h;
+
+                const float* ptr = bottom_blob;
+                memcpy(outptr, ptr, size * elemsize);
+
+                outptr += size;
+            }
+
+            return 0;
         }
 
-        return 0;
-    }
-
-    if (dims == 2 && axis == 1)
-    {
-        // interleave image row
-        int h = bottom_blobs[0].h;
-
-        // total width
-        int top_w = 0;
-        for (size_t b=0; b<bottom_blobs.size(); b++)
+        if (dims == 2 && axis == 1)
         {
-            const Mat& bottom_blob = bottom_blobs[b];
-            top_w += bottom_blob.w;
-        }
+            // interleave image row
+            int h = bottom_blobs[0].h;
 
-        Mat& top_blob = top_blobs[0];
-        top_blob.create(top_w, h, elemsize, opt.blob_allocator);
-        if (top_blob.empty())
-            return -100;
+            // total width
+            int top_w = 0;
+            for (size_t b=0; b<bottom_blobs.size(); b++)
+            {
+                const Mat& bottom_blob = bottom_blobs[b];
+                top_w += bottom_blob.w;
+            }
 
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int i=0; i<h; i++)
-        {
+            Mat& top_blob = top_blobs[0];
+            top_blob.create(top_w, h, elemsize, opt.blob_allocator);
+            if (top_blob.empty())
+                return -100;
+
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(h, get_gcd_concurrent(), ^(size_t i) {
+#else
+                for (int i=0; i<h; i++) {
 #endif
+
                 float* outptr = top_blob.row(i);
                 for (size_t b=0; b<bottom_blobs.size(); b++)
                 {
@@ -139,75 +140,76 @@ int Concat::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_
 
 #if __APPLE__
             });
+#else
+            }
 #endif
 
+            return 0;
         }
 
-        return 0;
-    }
-
-    if (dims == 3 && axis == 0)
-    {
-        // concat dim
-        int w = bottom_blobs[0].w;
-        int h = bottom_blobs[0].h;
-
-        // total channels
-        int top_channels = 0;
-        for (size_t b=0; b<bottom_blobs.size(); b++)
+        if (dims == 3 && axis == 0)
         {
-            const Mat& bottom_blob = bottom_blobs[b];
-            top_channels += bottom_blob.c;
+            // concat dim
+            int w = bottom_blobs[0].w;
+            int h = bottom_blobs[0].h;
+
+            // total channels
+            int top_channels = 0;
+            for (size_t b=0; b<bottom_blobs.size(); b++)
+            {
+                const Mat& bottom_blob = bottom_blobs[b];
+                top_channels += bottom_blob.c;
+            }
+
+            Mat& top_blob = top_blobs[0];
+            top_blob.create(w, h, top_channels, elemsize, opt.blob_allocator);
+            if (top_blob.empty())
+                return -100;
+
+            int q = 0;
+            for (size_t b=0; b<bottom_blobs.size(); b++)
+            {
+                const Mat& bottom_blob = bottom_blobs[b];
+
+                int channels = bottom_blob.c;
+                int size = bottom_blob.cstep * channels;
+
+                const float* ptr = bottom_blob;
+                float* outptr = top_blob.channel(q);
+                memcpy(outptr, ptr, size * elemsize);
+
+                q += channels;
+            }
+
+            return 0;
         }
 
-        Mat& top_blob = top_blobs[0];
-        top_blob.create(w, h, top_channels, elemsize, opt.blob_allocator);
-        if (top_blob.empty())
-            return -100;
-
-        int q = 0;
-        for (size_t b=0; b<bottom_blobs.size(); b++)
+        if (dims == 3 && axis == 1)
         {
-            const Mat& bottom_blob = bottom_blobs[b];
+            // interleave dim height
+            int w = bottom_blobs[0].w;
+            int channels = bottom_blobs[0].c;
 
-            int channels = bottom_blob.c;
-            int size = bottom_blob.cstep * channels;
+            // total height
+            int top_h = 0;
+            for (size_t b=0; b<bottom_blobs.size(); b++)
+            {
+                const Mat& bottom_blob = bottom_blobs[b];
+                top_h += bottom_blob.h;
+            }
 
-            const float* ptr = bottom_blob;
-            float* outptr = top_blob.channel(q);
-            memcpy(outptr, ptr, size * elemsize);
+            Mat& top_blob = top_blobs[0];
+            top_blob.create(w, top_h, channels, elemsize, opt.blob_allocator);
+            if (top_blob.empty())
+                return -100;
 
-            q += channels;
-        }
-
-        return 0;
-    }
-
-    if (dims == 3 && axis == 1)
-    {
-        // interleave dim height
-        int w = bottom_blobs[0].w;
-        int channels = bottom_blobs[0].c;
-
-        // total height
-        int top_h = 0;
-        for (size_t b=0; b<bottom_blobs.size(); b++)
-        {
-            const Mat& bottom_blob = bottom_blobs[b];
-            top_h += bottom_blob.h;
-        }
-
-        Mat& top_blob = top_blobs[0];
-        top_blob.create(w, top_h, channels, elemsize, opt.blob_allocator);
-        if (top_blob.empty())
-            return -100;
-
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
+
                 float* outptr = top_blob.channel(q);
 
                 for (size_t b=0; b<bottom_blobs.size(); b++)
@@ -224,38 +226,39 @@ int Concat::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_
 
 #if __APPLE__
             });
+#else
+            }
 #endif
 
+            return 0;
         }
 
-        return 0;
-    }
-
-    if (dims == 3 && axis == 2)
-    {
-        // interleave dim width
-        int h = bottom_blobs[0].h;
-        int channels = bottom_blobs[0].c;
-
-        // total height
-        int top_w = 0;
-        for (size_t b=0; b<bottom_blobs.size(); b++)
+        if (dims == 3 && axis == 2)
         {
-            const Mat& bottom_blob = bottom_blobs[b];
-            top_w += bottom_blob.w;
-        }
+            // interleave dim width
+            int h = bottom_blobs[0].h;
+            int channels = bottom_blobs[0].c;
 
-        Mat& top_blob = top_blobs[0];
-        top_blob.create(top_w, h, channels, elemsize, opt.blob_allocator);
-        if (top_blob.empty())
-            return -100;
+            // total height
+            int top_w = 0;
+            for (size_t b=0; b<bottom_blobs.size(); b++)
+            {
+                const Mat& bottom_blob = bottom_blobs[b];
+                top_w += bottom_blob.w;
+            }
 
-        #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
+            Mat& top_blob = top_blobs[0];
+            top_blob.create(top_w, h, channels, elemsize, opt.blob_allocator);
+            if (top_blob.empty())
+                return -100;
+
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
+
                 float* outptr = top_blob.channel(q);
 
                 for (int i=0; i<h; i++)
@@ -273,14 +276,14 @@ int Concat::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_
 
 #if __APPLE__
             });
+#else
+            }
 #endif
 
+            return 0;
         }
 
         return 0;
     }
-
-    return 0;
-}
 
 } // namespace ncnn

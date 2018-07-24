@@ -27,10 +27,10 @@ static void pooling2x2s2_max_neon(const Mat& bottom_blob, Mat& top_blob, const O
     const int tailstep = w - 2*outw + w;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<inch; q++)
-    {
 #if __APPLE__
-        dispatch_async(get_gcd_concurrent(), ^{
+    dispatch_apply(inch, get_gcd_concurrent(), ^(size_t q) {
+#else
+     for (int q=0; q<inch; q++) {
 #endif
 
             const float* img0 = bottom_blob.channel(q);
@@ -120,7 +120,8 @@ static void pooling2x2s2_max_neon(const Mat& bottom_blob, Mat& top_blob, const O
                 r1 += tailstep;
             }
 #if __APPLE__
-        });
-#endif
+    });
+#else
     }
+#endif
 }

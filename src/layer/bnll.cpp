@@ -17,27 +17,28 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(BNLL)
+    DEFINE_LAYER_CREATOR(BNLL)
 
-BNLL::BNLL()
-{
-    one_blob_only = true;
-    support_inplace = true;
-}
-
-int BNLL::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    int size = w * h;
-
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
+    BNLL::BNLL()
     {
+        one_blob_only = true;
+        support_inplace = true;
+    }
+
+    int BNLL::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
+    {
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        int size = w * h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-        dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<channels; q++) {
 #endif
+
             float* ptr = bottom_top_blob.channel(q);
 
             for (int i=0; i<size; i++)
@@ -47,14 +48,13 @@ int BNLL::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
                 else
                     ptr[i] = log(1.f + exp(ptr[i]));
             }
-
 #if __APPLE__
         });
+#else
+        }
 #endif
 
+        return 0;
     }
-
-    return 0;
-}
 
 } // namespace ncnn

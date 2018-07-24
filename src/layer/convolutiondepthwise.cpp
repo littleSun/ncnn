@@ -142,44 +142,45 @@ namespace ncnn {
         if (channels == group && group == num_output)
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int g=0; g<group; g++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(group, get_gcd_concurrent(), ^(size_t g) {
+#else
+                for (int g=0; g<group; g++) {
 #endif
-                    float* outptr = top_blob.channel(g);
-                    const float* kptr = (const float*)weight_data + maxk * g;
-                    const Mat m = bottom_blob_bordered.channel(g);
 
-                    for (int i = 0; i < outh; i++)
+                float* outptr = top_blob.channel(g);
+                const float* kptr = (const float*)weight_data + maxk * g;
+                const Mat m = bottom_blob_bordered.channel(g);
+
+                for (int i = 0; i < outh; i++)
+                {
+                    for (int j = 0; j < outw; j++)
                     {
-                        for (int j = 0; j < outw; j++)
+                        float sum = 0.f;
+
+                        if (bias_term)
+                            sum = bias_data[g];
+
+                        const float* sptr = m.row(i*stride_h) + j*stride_w;
+
+                        for (int k = 0; k < maxk; k++)
                         {
-                            float sum = 0.f;
-
-                            if (bias_term)
-                                sum = bias_data[g];
-
-                            const float* sptr = m.row(i*stride_h) + j*stride_w;
-
-                            for (int k = 0; k < maxk; k++)
-                            {
-                                float val = sptr[ space_ofs[k] ];
-                                float w = kptr[k];
-                                sum += val * w;
-                            }
-
-                            outptr[j] = sum;
+                            float val = sptr[ space_ofs[k] ];
+                            float w = kptr[k];
+                            sum += val * w;
                         }
 
-                        outptr += outw;
+                        outptr[j] = sum;
                     }
 
-#if __APPLE__
-                });
-#endif
+                    outptr += outw;
+                }
 
+#if __APPLE__
+            });
+#else
             }
+#endif
 
             return 0;
         }
@@ -194,50 +195,52 @@ namespace ncnn {
 #endif // _WIN32
         for (int g=0; g<group; g++)
         {
-            for (int p=0; p<num_output_g; p++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(num_output_g, get_gcd_concurrent(), ^(size_t p) {
+#else
+                for (int p=0; p<num_output_g; p++) {
 #endif
-                    float* outptr = top_blob.channel(g * num_output_g + p);
-                    const float* weight_data_ptr = (const float*)weight_data + maxk * channels_g * num_output_g * g;
 
-                    for (int i = 0; i < outh; i++)
+                float* outptr = top_blob.channel(g * num_output_g + p);
+                const float* weight_data_ptr = (const float*)weight_data + maxk * channels_g * num_output_g * g;
+
+                for (int i = 0; i < outh; i++)
+                {
+                    for (int j = 0; j < outw; j++)
                     {
-                        for (int j = 0; j < outw; j++)
+                        float sum = 0.f;
+
+                        if (bias_term)
+                            sum = bias_data[num_output_g * g + p];
+
+                        const float* kptr = weight_data_ptr + maxk * channels_g * p;
+
+                        // channels_g
+                        for (int q=0; q<channels_g; q++)
                         {
-                            float sum = 0.f;
+                            const Mat m = bottom_blob_bordered.channel(channels_g * g + q);
+                            const float* sptr = m.row(i*stride_h) + j*stride_w;
 
-                            if (bias_term)
-                                sum = bias_data[num_output_g * g + p];
-
-                            const float* kptr = weight_data_ptr + maxk * channels_g * p;
-
-                            // channels_g
-                            for (int q=0; q<channels_g; q++)
+                            for (int k = 0; k < maxk; k++)
                             {
-                                const Mat m = bottom_blob_bordered.channel(channels_g * g + q);
-                                const float* sptr = m.row(i*stride_h) + j*stride_w;
-
-                                for (int k = 0; k < maxk; k++)
-                                {
-                                    float val = sptr[ space_ofs[k] ];
-                                    float w = kptr[k];
-                                    sum += val * w;
-                                }
-
-                                kptr += maxk;
+                                float val = sptr[ space_ofs[k] ];
+                                float w = kptr[k];
+                                sum += val * w;
                             }
 
-                            outptr[j] = sum;
+                            kptr += maxk;
                         }
 
-                        outptr += outw;
+                        outptr[j] = sum;
                     }
+
+                    outptr += outw;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         return 0;

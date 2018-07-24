@@ -53,35 +53,39 @@ namespace ncnn {
             if (num_slope > 1)
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int i=0; i<w; i++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(w, get_gcd_concurrent(), ^(size_t i) {
+#else
+                    for (int i=0; i<w; i++) {
 #endif
-                        if (ptr[i] < 0)
-                            ptr[i] *= slope_data[i];
+
+                    if (ptr[i] < 0)
+                        ptr[i] *= slope_data[i];
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
             else
             {
                 float slope = slope_data[0];
 
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int i=0; i<w; i++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(w, get_gcd_concurrent(), ^(size_t i) {
+#else
+                    for (int i=0; i<w; i++) {
 #endif
 
-                        if (ptr[i] < 0)
-                            ptr[i] *= slope;
+
+                    if (ptr[i] < 0)
+                        ptr[i] *= slope;
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
         }
 
@@ -91,23 +95,25 @@ namespace ncnn {
             int h = bottom_top_blob.h;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int i=0; i<h; i++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(h, get_gcd_concurrent(), ^(size_t i) {
+#else
+                for (int i=0; i<h; i++) {
 #endif
-                    float* ptr = bottom_top_blob.row(i);
-                    float slope = num_slope > 1 ? slope_data[i] : slope_data[0];
 
-                    for (int j=0; j<w; j++)
-                    {
-                        if (ptr[j] < 0)
-                            ptr[j] *= slope;
-                    }
+                float* ptr = bottom_top_blob.row(i);
+                float slope = num_slope > 1 ? slope_data[i] : slope_data[0];
+
+                for (int j=0; j<w; j++)
+                {
+                    if (ptr[j] < 0)
+                        ptr[j] *= slope;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         if (dims == 3)
@@ -118,23 +124,25 @@ namespace ncnn {
             int size = w * h;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float* ptr = bottom_top_blob.channel(q);
-                    float slope = num_slope > 1 ? slope_data[q] : slope_data[0];
 
-                    for (int i=0; i<size; i++)
-                    {
-                        if (ptr[i] < 0)
-                            ptr[i] *= slope;
-                    }
+                float* ptr = bottom_top_blob.channel(q);
+                float slope = num_slope > 1 ? slope_data[q] : slope_data[0];
+
+                for (int i=0; i<size; i++)
+                {
+                    if (ptr[i] < 0)
+                        ptr[i] *= slope;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         return 0;

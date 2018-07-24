@@ -211,11 +211,12 @@ namespace ncnn {
         proposals.create(4, w * h, num_anchors);
 
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<num_anchors; q++)
-        {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(num_anchors, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<num_anchors; q++) {
 #endif
+
                 const float* bbox_xptr = bbox_blob.channel(q * 4);
                 const float* bbox_yptr = bbox_blob.channel(q * 4 + 1);
                 const float* bbox_wptr = bbox_blob.channel(q * 4 + 2);
@@ -270,20 +271,22 @@ namespace ncnn {
                     anchor_y += feat_stride;
                 }
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         // clip predicted boxes to image
         float im_w = im_info_blob[1];
         float im_h = im_info_blob[0];
 
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<num_anchors; q++)
-        {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(num_anchors, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<num_anchors; q++) {
 #endif
+
                 Mat pbs = proposals.channel(q);
 
                 for (int i = 0; i < w * h; i++)
@@ -297,9 +300,10 @@ namespace ncnn {
                     pb[3] = std::max(std::min(pb[3], im_h - 1), 0.f);
                 }
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         // remove predicted boxes with either height or width < threshold
         std::vector<Rect> proposal_boxes;

@@ -31,23 +31,24 @@ namespace ncnn {
         {
             // substract mean only
 #pragma omp parallel for
-            for (int q=0; q<c; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(c, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<c; q++) {
 #endif
-                    float* ptr = channel(q);//data + cstep * q;
-                    const float mean = mean_vals[q];
+
+                float* ptr = channel(q);//data + cstep * q;
+                const float mean = mean_vals[q];
 
 #if __ARM_NEON
-                    int nn = size >> 2;
+                int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-                    int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                    #if __aarch64__
+                #if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -89,37 +90,39 @@ namespace ncnn {
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                    for (; remain>0; remain--)
-                    {
-                        *ptr -= mean;
-                        ptr++;
-                    }
+                for (; remain>0; remain--)
+                {
+                    *ptr -= mean;
+                    ptr++;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else if (!mean_vals && norm_vals)
         {
             // normalize only
 #pragma omp parallel for
-            for (int q=0; q<c; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(c, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<c; q++) {
 #endif
-                    float* ptr = channel(q);//data + cstep * q;
-                    const float norm = norm_vals[q];
+
+                float* ptr = channel(q);//data + cstep * q;
+                const float norm = norm_vals[q];
 
 #if __ARM_NEON
-                    int nn = size >> 2;
+                int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-                    int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                    #if __aarch64__
+                #if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -161,38 +164,40 @@ namespace ncnn {
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                    for (; remain>0; remain--)
-                    {
-                        *ptr *= norm;
-                        ptr++;
-                    }
+                for (; remain>0; remain--)
+                {
+                    *ptr *= norm;
+                    ptr++;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else if (mean_vals && norm_vals)
         {
             // substract mean and normalize
 #pragma omp parallel for
-            for (int q=0; q<c; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(c, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<c; q++) {
 #endif
-                    float* ptr = channel(q);//data + cstep * q;
-                    const float mean = mean_vals[q];
-                    const float norm = norm_vals[q];
+
+                float* ptr = channel(q);//data + cstep * q;
+                const float mean = mean_vals[q];
+                const float norm = norm_vals[q];
 
 #if __ARM_NEON
-                    int nn = size >> 2;
+                int nn = size >> 2;
             int remain = size - (nn << 2);
 #else
-                    int remain = size;
+                int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                    #if __aarch64__
+                #if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -240,15 +245,16 @@ namespace ncnn {
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                    for (; remain>0; remain--)
-                    {
-                        *ptr = (*ptr - mean) * norm;
-                        ptr++;
-                    }
+                for (; remain>0; remain--)
+                {
+                    *ptr = (*ptr - mean) * norm;
+                    ptr++;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
     }
 
@@ -547,19 +553,21 @@ namespace ncnn {
 
             // unroll image channel
 #pragma omp parallel for num_threads(num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const Mat m = src.channel(q);
-                    Mat borderm = dst.channel(q);
 
-                    copy_make_border_image(m, borderm, top, left, type, v);
+                const Mat m = src.channel(q);
+                Mat borderm = dst.channel(q);
+
+                copy_make_border_image(m, borderm, top, left, type, v);
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
     }
 
@@ -619,19 +627,21 @@ namespace ncnn {
 
             // unroll image channel
 #pragma omp parallel for num_threads(num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const Mat m = src.channel(q);
-                    Mat cutm = dst.channel(q);
 
-                    copy_cut_border_image(m, cutm, top, left);
+                const Mat m = src.channel(q);
+                Mat cutm = dst.channel(q);
+
+                copy_cut_border_image(m, cutm, top, left);
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
     }
 
@@ -892,19 +902,21 @@ namespace ncnn {
 
             // unroll image channel
 #pragma omp parallel for num_threads(num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const Mat m = src.channel(q);
-                    Mat resizem = dst.channel(q);
 
-                    resize_bilinear_image(m, resizem, w, h);
+                const Mat m = src.channel(q);
+                Mat resizem = dst.channel(q);
+
+                resize_bilinear_image(m, resizem, w, h);
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
     }
 

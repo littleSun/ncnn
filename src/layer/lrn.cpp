@@ -55,22 +55,24 @@ namespace ncnn {
             return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<channels; q++){
 #endif
-                const float* ptr = bottom_top_blob.channel(q);
-                float* outptr = square_blob.channel(q);
 
-                for (int i=0; i<size; i++)
-                {
-                    outptr[i] = ptr[i] * ptr[i];
-                }
+            const float* ptr = bottom_top_blob.channel(q);
+            float* outptr = square_blob.channel(q);
+
+            for (int i=0; i<size; i++)
+            {
+                outptr[i] = ptr[i] * ptr[i];
+            }
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         if (region_type == NormRegion_ACROSS_CHANNELS)
         {
@@ -87,35 +89,37 @@ namespace ncnn {
             const float alpha_div_size = alpha / local_size;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++){
 #endif
-                    // square sum
-                    float* ssptr = square_sum.channel(q);
 
-                    for (int p=q - local_size / 2; p<=q + local_size / 2; p++)
-                    {
-                        if (p < 0 || p >= channels)
-                            continue;
+                // square sum
+                float* ssptr = square_sum.channel(q);
 
-                        const float* sptr = square_blob.channel(p);
-                        for (int i=0; i<size; i++)
-                        {
-                            ssptr[i] += sptr[i];
-                        }
-                    }
+                for (int p=q - local_size / 2; p<=q + local_size / 2; p++)
+                {
+                    if (p < 0 || p >= channels)
+                        continue;
 
-                    float* ptr = bottom_top_blob.channel(q);
+                    const float* sptr = square_blob.channel(p);
                     for (int i=0; i<size; i++)
                     {
-                        ptr[i] = ptr[i] * pow(bias + alpha_div_size * ssptr[i], -beta);
+                        ssptr[i] += sptr[i];
                     }
+                }
+
+                float* ptr = bottom_top_blob.channel(q);
+                for (int i=0; i<size; i++)
+                {
+                    ptr[i] = ptr[i] * pow(bias + alpha_div_size * ssptr[i], -beta);
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else if (region_type == NormRegion_WITHIN_CHANNEL)
         {
@@ -158,33 +162,36 @@ namespace ncnn {
             }
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++) {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    float *ptr = bottom_top_blob.channel(q);
-                    const Mat m = square_blob_bordered.channel(q);
 
-                    for (int i = 0; i < outh; i++) {
-                        for (int j = 0; j < outw; j++) {
-                            const float *sptr = m.row(i) + j;
+                float *ptr = bottom_top_blob.channel(q);
+                const Mat m = square_blob_bordered.channel(q);
 
-                            float ss = 0.f;
+                for (int i = 0; i < outh; i++) {
+                    for (int j = 0; j < outw; j++) {
+                        const float *sptr = m.row(i) + j;
 
-                            for (int k = 0; k < maxk; k++) {
-                                float val = sptr[space_ofs[k]];
-                                ss += val;
-                            }
+                        float ss = 0.f;
 
-                            ptr[j] = ptr[j] * pow(bias + alpha_div_size * ss, -beta);
+                        for (int k = 0; k < maxk; k++) {
+                            float val = sptr[space_ofs[k]];
+                            ss += val;
                         }
 
-                        ptr += outw;
+                        ptr[j] = ptr[j] * pow(bias + alpha_div_size * ss, -beta);
                     }
+
+                    ptr += outw;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         return 0;

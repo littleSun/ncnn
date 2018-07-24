@@ -65,46 +65,49 @@ namespace ncnn {
             if (pooling_type == PoolMethod_MAX)
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        const float* ptr = bottom_blob.channel(q);
+                    const float* ptr = bottom_blob.channel(q);
 
-                        float max = ptr[0];
-                        for (int i=0; i<size; i++)
-                        {
-                            max = std::max(max, ptr[i]);
-                        }
+                    float max = ptr[0];
+                    for (int i=0; i<size; i++)
+                    {
+                        max = std::max(max, ptr[i]);
+                    }
 
-                        top_blob[q] = max;
+                    top_blob[q] = max;
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
             else if (pooling_type == PoolMethod_AVE)
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        const float* ptr = bottom_blob.channel(q);
 
-                        float sum = 0.f;
-                        for (int i=0; i<size; i++)
-                        {
-                            sum += ptr[i];
-                        }
+                    const float* ptr = bottom_blob.channel(q);
 
-                        top_blob[q] = sum / size;
+                    float sum = 0.f;
+                    for (int i=0; i<size; i++)
+                    {
+                        sum += ptr[i];
+                    }
+
+                    top_blob[q] = sum / size;
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
 
             return 0;
@@ -197,118 +200,122 @@ namespace ncnn {
         if (pooling_type == PoolMethod_MAX)
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const Mat m = bottom_blob_bordered.channel(q);
-                    float* outptr = top_blob.channel(q);
 
-                    for (int i = 0; i < outh; i++)
+                const Mat m = bottom_blob_bordered.channel(q);
+                float* outptr = top_blob.channel(q);
+
+                for (int i = 0; i < outh; i++)
+                {
+                    for (int j = 0; j < outw; j++)
                     {
-                        for (int j = 0; j < outw; j++)
+                        const float* sptr = m.row(i*stride_h) + j*stride_w;
+
+                        float max = sptr[0];
+
+                        for (int k = 0; k < maxk; k++)
                         {
-                            const float* sptr = m.row(i*stride_h) + j*stride_w;
-
-                            float max = sptr[0];
-
-                            for (int k = 0; k < maxk; k++)
-                            {
-                                float val = sptr[ space_ofs[k] ];
-                                max = std::max(max, val);
-                            }
-
-                            outptr[j] = max;
+                            float val = sptr[ space_ofs[k] ];
+                            max = std::max(max, val);
                         }
 
-                        outptr += outw;
+                        outptr[j] = max;
+                    }
+
+                    outptr += outw;
 
                 }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else if (pooling_type == PoolMethod_AVE)
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const Mat m = bottom_blob_bordered.channel(q);
-                    float* outptr = top_blob.channel(q);
 
+                const Mat m = bottom_blob_bordered.channel(q);
+                float* outptr = top_blob.channel(q);
+
+                for (int i = 0; i < outh; i++)
+                {
+                    for (int j = 0; j < outw; j++)
+                    {
+                        const float* sptr = m.row(i*stride_h) + j*stride_w;
+
+                        float sum = 0;
+
+                        for (int k = 0; k < maxk; k++)
+                        {
+                            float val = sptr[ space_ofs[k] ];
+                            sum += val;
+                        }
+
+                        outptr[j] = sum / maxk;
+                    }
+
+                    outptr += outw;
+                }
+
+                // fix pad
+                if (pad_top != 0)
+                {
+                    const float scale = (float)kernel_h / (kernel_h - pad_top);
+
+                    outptr = top_blob.channel(q).row(0);
+                    for (int i = 0; i < outw; i++)
+                    {
+                        outptr[i] *= scale;
+                    }
+                }
+                if (pad_bottom + htailpad != 0)
+                {
+                    const float scale = (float)kernel_h / (kernel_h - pad_bottom - htailpad);
+
+                    outptr = top_blob.channel(q).row(outh - 1);
+                    for (int i = 0; i < outw; i++)
+                    {
+                        outptr[i] *= scale;
+                    }
+                }
+                if (pad_left != 0)
+                {
+                    const float scale = (float)kernel_w / (kernel_w - pad_left);
+
+                    outptr = top_blob.channel(q);
                     for (int i = 0; i < outh; i++)
                     {
-                        for (int j = 0; j < outw; j++)
-                        {
-                            const float* sptr = m.row(i*stride_h) + j*stride_w;
-
-                            float sum = 0;
-
-                            for (int k = 0; k < maxk; k++)
-                            {
-                                float val = sptr[ space_ofs[k] ];
-                                sum += val;
-                            }
-
-                            outptr[j] = sum / maxk;
-                        }
-
+                        *outptr *= scale;
                         outptr += outw;
                     }
+                }
+                if (pad_right + wtailpad != 0)
+                {
+                    const float scale = (float)kernel_w / (kernel_w - pad_right - wtailpad);
 
-                    // fix pad
-                    if (pad_top != 0)
+                    outptr = top_blob.channel(q);
+                    outptr += outw - 1;
+                    for (int i = 0; i < outh; i++)
                     {
-                        const float scale = (float)kernel_h / (kernel_h - pad_top);
-
-                        outptr = top_blob.channel(q).row(0);
-                        for (int i = 0; i < outw; i++)
-                        {
-                            outptr[i] *= scale;
-                        }
+                        *outptr *= scale;
+                        outptr += outw;
                     }
-                    if (pad_bottom + htailpad != 0)
-                    {
-                        const float scale = (float)kernel_h / (kernel_h - pad_bottom - htailpad);
-
-                        outptr = top_blob.channel(q).row(outh - 1);
-                        for (int i = 0; i < outw; i++)
-                        {
-                            outptr[i] *= scale;
-                        }
-                    }
-                    if (pad_left != 0)
-                    {
-                        const float scale = (float)kernel_w / (kernel_w - pad_left);
-
-                        outptr = top_blob.channel(q);
-                        for (int i = 0; i < outh; i++)
-                        {
-                            *outptr *= scale;
-                            outptr += outw;
-                        }
-                    }
-                    if (pad_right + wtailpad != 0)
-                    {
-                        const float scale = (float)kernel_w / (kernel_w - pad_right - wtailpad);
-
-                        outptr = top_blob.channel(q);
-                        outptr += outw - 1;
-                        for (int i = 0; i < outh; i++)
-                        {
-                            *outptr *= scale;
-                            outptr += outw;
-                        }
-                    }
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         return 0;

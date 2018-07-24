@@ -90,24 +90,26 @@ namespace ncnn {
                 return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = a.channel(q);
 
-                    float sum = v0;
-                    for (int i=0; i<size; i++)
-                    {
-                        sum = op(sum, ptr[i]);
-                    }
+                const float* ptr = a.channel(q);
 
-                    sums[q] = sum;
+                float sum = v0;
+                for (int i=0; i<size; i++)
+                {
+                    sum = op(sum, ptr[i]);
+                }
+
+                sums[q] = sum;
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
             float sum = v0;
             for (int i=0; i<channels; i++)
@@ -120,52 +122,56 @@ namespace ncnn {
         else if (dim == 1)
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = a.channel(q);
 
-                    float sum = v0;
-                    for (int i=0; i<size; i++)
-                    {
-                        sum = op(sum, ptr[i]);
-                    }
+                const float* ptr = a.channel(q);
 
-                    b[q] = sum * coeff;
+                float sum = v0;
+                for (int i=0; i<size; i++)
+                {
+                    sum = op(sum, ptr[i]);
+                }
+
+                b[q] = sum * coeff;
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else if (dim == 2)
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = a.channel(q);
-                    float* outptr = b.channel(q);
 
-                    for (int i=0; i<h; i++)
+                const float* ptr = a.channel(q);
+                float* outptr = b.channel(q);
+
+                for (int i=0; i<h; i++)
+                {
+                    float sum = v0;
+                    for (int j=0; j<w; j++)
                     {
-                        float sum = v0;
-                        for (int j=0; j<w; j++)
-                        {
-                            sum = op(sum, ptr[i]);
-                        }
-
-                        outptr[i] = sum * coeff;
-
-                        ptr += w;
+                        sum = op(sum, ptr[i]);
                     }
+
+                    outptr[i] = sum * coeff;
+
+                    ptr += w;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else if (dim == -1)
         {
@@ -181,27 +187,29 @@ namespace ncnn {
             mins.fill(v0);
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = a.channel(q);
-                    float* mins_ptr = mins.channel(q);
 
-                    for (int i=0; i<h; i++)
+                const float* ptr = a.channel(q);
+                float* mins_ptr = mins.channel(q);
+
+                for (int i=0; i<h; i++)
+                {
+                    for (int j=0; j<w; j++)
                     {
-                        for (int j=0; j<w; j++)
-                        {
-                            mins_ptr[j] = op(mins_ptr[j], ptr[i]);
-                        }
-
-                        ptr += w;
+                        mins_ptr[j] = op(mins_ptr[j], ptr[i]);
                     }
+
+                    ptr += w;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
             b.fill(v0);
 

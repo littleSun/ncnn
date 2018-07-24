@@ -45,10 +45,10 @@ namespace ncnn {
             return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<channels; q++) {
 #endif
 
                 const float* ptr = bottom_top_blob.channel(q);
@@ -81,8 +81,9 @@ namespace ncnn {
                 }
 #if __APPLE__
             });
-#endif
+#else
         }
+#endif
 
         if (region_type == NormRegion_ACROSS_CHANNELS)
         {
@@ -101,11 +102,12 @@ namespace ncnn {
             const float alpha_div_size = alpha / local_size;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+             dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+             for (int q=0; q<channels; q++) {
 #endif
+
                     // square sum
                     for (int p=q - local_size / 2; p<=q + local_size / 2; p++)
                     {
@@ -178,9 +180,10 @@ namespace ncnn {
                         ptr++;
                     }
 #if __APPLE__
-                });
-#endif
+             });
+#else
             }
+#endif
         }
         else if (region_type == NormRegion_WITHIN_CHANNEL)
         {
@@ -223,10 +226,10 @@ namespace ncnn {
             }
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<channels; q++) {
 #endif
 
                     float* ptr = bottom_top_blob.channel(q);
@@ -252,9 +255,10 @@ namespace ncnn {
                         ptr += outw;
                     }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         return 0;

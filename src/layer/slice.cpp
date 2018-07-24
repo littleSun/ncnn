@@ -116,18 +116,20 @@ namespace ncnn {
                     return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int j=0; j<h; j++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(h, get_gcd_concurrent(), ^(size_t j) {
+#else
+                    for (int j=0; j<h; j++) {
 #endif
-                        float* outptr = top_blob.row(j);
-                        const float* ptr = bottom_blob.row(j) + q;
-                        memcpy(outptr, ptr, slice * elemsize);
+
+                    float* outptr = top_blob.row(j);
+                    const float* ptr = bottom_blob.row(j) + q;
+                    memcpy(outptr, ptr, slice * elemsize);
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
 
                 q += slice;
             }
@@ -188,20 +190,22 @@ namespace ncnn {
                     return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int p=0; p<channels; p++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t p) {
+#else
+                    for (int p=0; p<channels; p++) {
 #endif
-                        int size = w * slice;
 
-                        float* outptr = top_blob.channel(p);
-                        const float* ptr = bottom_blob.channel(p).row(q);
-                        memcpy(outptr, ptr, size * elemsize);
+                    int size = w * slice;
+
+                    float* outptr = top_blob.channel(p);
+                    const float* ptr = bottom_blob.channel(p).row(q);
+                    memcpy(outptr, ptr, size * elemsize);
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
 
                 q += slice;
             }
@@ -230,26 +234,28 @@ namespace ncnn {
                     return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int p=0; p<channels; p++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t p) {
+#else
+                    for (int p=0; p<channels; p++) {
 #endif
 
-                        float* outptr = top_blob.channel(p);
-                        const Mat m = bottom_blob.channel(p);
 
-                        for (int j=0; j<h; j++)
-                        {
-                            const float* ptr = m.row(j) + q;
-                            memcpy(outptr, ptr, slice * elemsize);
+                    float* outptr = top_blob.channel(p);
+                    const Mat m = bottom_blob.channel(p);
 
-                            outptr += slice;
-                        }
+                    for (int j=0; j<h; j++)
+                    {
+                        const float* ptr = m.row(j) + q;
+                        memcpy(outptr, ptr, slice * elemsize);
+
+                        outptr += slice;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
 
                 q += slice;
             }

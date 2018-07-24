@@ -57,25 +57,26 @@ namespace ncnn {
                 return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = bottom_blob.channel(q);
-                    float* outptr = top_blob.channel(q);
+                const float* ptr = bottom_blob.channel(q);
+                float* outptr = top_blob.channel(q);
 
-                    for (int i = 0; i < w; i++)
+                for (int i = 0; i < w; i++)
+                {
+                    for (int j = 0; j < h; j++)
                     {
-                        for (int j = 0; j < h; j++)
-                        {
-                            outptr[i*h + j] = ptr[j*w + i];
-                        }
+                        outptr[i*h + j] = ptr[j*w + i];
                     }
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else if (order_type == 2)
         {
@@ -84,26 +85,28 @@ namespace ncnn {
                 return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<h; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(h, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<h; q++) {
 #endif
-                    float* outptr = top_blob.channel(q);
 
-                    for (int i = 0; i < channels; i++)
+                float* outptr = top_blob.channel(q);
+
+                for (int i = 0; i < channels; i++)
+                {
+                    const float* ptr = bottom_blob.channel(i).row(q);
+
+                    for (int j = 0; j < w; j++)
                     {
-                        const float* ptr = bottom_blob.channel(i).row(q);
-
-                        for (int j = 0; j < w; j++)
-                        {
-                            outptr[i*w + j] = ptr[j];
-                        }
+                        outptr[i*w + j] = ptr[j];
                     }
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else if (order_type == 3)
         {
@@ -112,26 +115,28 @@ namespace ncnn {
                 return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<h; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(h, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<h; q++) {
 #endif
-                    float* outptr = top_blob.channel(q);
 
-                    for (int i = 0; i < w; i++)
+                float* outptr = top_blob.channel(q);
+
+                for (int i = 0; i < w; i++)
+                {
+                    for (int j = 0; j < channels; j++)
                     {
-                        for (int j = 0; j < channels; j++)
-                        {
-                            const float* ptr = bottom_blob.channel(j).row(q);
+                        const float* ptr = bottom_blob.channel(j).row(q);
 
-                            outptr[i*channels + j] = ptr[i];
-                        }
+                        outptr[i*channels + j] = ptr[i];
                     }
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else if (order_type == 4)
         {
@@ -140,26 +145,28 @@ namespace ncnn {
                 return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<w; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(w, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<w; q++) {
 #endif
-                    float* outptr = top_blob.channel(q);
 
-                    for (int i = 0; i < channels; i++)
+                float* outptr = top_blob.channel(q);
+
+                for (int i = 0; i < channels; i++)
+                {
+                    const float* ptr = bottom_blob.channel(i);
+
+                    for (int j = 0; j < h; j++)
                     {
-                        const float* ptr = bottom_blob.channel(i);
-
-                        for (int j = 0; j < h; j++)
-                        {
-                            outptr[i*channels + j] = ptr[j*w + q];
-                        }
+                        outptr[i*channels + j] = ptr[j*w + q];
                     }
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
         else if (order_type == 5)
         {
@@ -168,26 +175,27 @@ namespace ncnn {
                 return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<w; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(w, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<w; q++) {
 #endif
-                    float* outptr = top_blob.channel(q);
+                float* outptr = top_blob.channel(q);
 
-                    for (int i = 0; i < h; i++)
+                for (int i = 0; i < h; i++)
+                {
+                    for (int j = 0; j < channels; j++)
                     {
-                        for (int j = 0; j < channels; j++)
-                        {
-                            const float* ptr = bottom_blob.channel(j);
+                        const float* ptr = bottom_blob.channel(j);
 
-                            outptr[i*channels + j] = ptr[i*w + q];
-                        }
+                        outptr[i*channels + j] = ptr[i*w + q];
                     }
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         return 0;

@@ -39,19 +39,22 @@ namespace ncnn {
             return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q = 0; q < channels; q++) {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q = 0; q < channels; q++) {
 #endif
 
-                const float *ptr = bottom_blob.channel(q);
-                float *outptr = (float *)top_blob + size * q;
 
-                for (int i = 0; i < size; i++) { outptr[i] = ptr[i]; }
+            const float *ptr = bottom_blob.channel(q);
+            float *outptr = (float *)top_blob + size * q;
+
+            for (int i = 0; i < size; i++) { outptr[i] = ptr[i]; }
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         return 0;
     }

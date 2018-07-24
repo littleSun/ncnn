@@ -63,33 +63,35 @@ namespace ncnn {
 
         // num_output
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int p=0; p<num_output; p++)
-        {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(num_output, get_gcd_concurrent(), ^(size_t p) {
+#else
+            for (int p=0; p<num_output; p++) {
 #endif
-                float sum = 0.f;
 
-                if (bias_term)
-                    sum = bias_data[p];
+            float sum = 0.f;
 
-                // channels
-                for (int q=0; q<channels; q++)
+            if (bias_term)
+                sum = bias_data[p];
+
+            // channels
+            for (int q=0; q<channels; q++)
+            {
+                const float* w = (const float*)weight_data + size * channels * p + size * q;
+                const float* m = bottom_blob.channel(q);
+
+                for (int i = 0; i < size; i++)
                 {
-                    const float* w = (const float*)weight_data + size * channels * p + size * q;
-                    const float* m = bottom_blob.channel(q);
-
-                    for (int i = 0; i < size; i++)
-                    {
-                        sum += m[i] * w[i];
-                    }
+                    sum += m[i] * w[i];
                 }
+            }
 
-                top_blob[p] = sum;
+            top_blob[p] = sum;
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         return 0;
     }

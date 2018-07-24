@@ -184,11 +184,12 @@ namespace ncnn {
         all_box_bbox_scores.resize(num_box);
 
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int pp = 0; pp < num_box; pp++)
-        {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(num_box, get_gcd_concurrent(), ^(size_t pp) {
+#else
+         for (int pp = 0; pp < num_box; pp++){
 #endif
+
                 int p = pp * channels_per_box;
 
                 const float bias_w = biases[pp*2];
@@ -255,9 +256,10 @@ namespace ncnn {
                     }
                 }
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         // gather all box
         std::vector<BBoxRect> all_bbox_rects;

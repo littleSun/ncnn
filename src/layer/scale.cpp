@@ -70,30 +70,34 @@ namespace ncnn {
             if (bias_term)
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int i=0; i<w; i++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(w, get_gcd_concurrent(), ^(size_t i) {
+#else
+                    for (int i=0; i<w; i++) {
 #endif
-                        ptr[i] = ptr[i] * scale_blob[i] + bias_data[i];
+
+                    ptr[i] = ptr[i] * scale_blob[i] + bias_data[i];
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
             else
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int i=0; i<w; i++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(w, get_gcd_concurrent(), ^(size_t i) {
+#else
+                    for (int i=0; i<w; i++) {
 #endif
-                        ptr[i] *= scale_blob[i];
+
+                    ptr[i] *= scale_blob[i];
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
         }
 
@@ -105,43 +109,47 @@ namespace ncnn {
             if (bias_term)
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int i=0; i<h; i++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(h, get_gcd_concurrent(), ^(size_t i) {
+#else
+                    for (int i=0; i<h; i++) {
 #endif
-                        float* ptr = bottom_top_blob.row(i);
-                        float s = scale_blob[i];
-                        float bias = bias_data[i];
 
-                        for (int j=0; j<w; j++)
-                        {
-                            ptr[j] = ptr[j] * s + bias;
-                        }
+                    float* ptr = bottom_top_blob.row(i);
+                    float s = scale_blob[i];
+                    float bias = bias_data[i];
+
+                    for (int j=0; j<w; j++)
+                    {
+                        ptr[j] = ptr[j] * s + bias;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
             else
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int i=0; i<h; i++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(h, get_gcd_concurrent(), ^(size_t i) {
+#else
+                    for (int i=0; i<h; i++) {
 #endif
-                        float* ptr = bottom_top_blob.row(i);
-                        float s = scale_blob[i];
 
-                        for (int j=0; j<w; j++)
-                        {
-                            ptr[j] *= s;
-                        }
+                    float* ptr = bottom_top_blob.row(i);
+                    float s = scale_blob[i];
+
+                    for (int j=0; j<w; j++)
+                    {
+                        ptr[j] *= s;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
         }
 
@@ -155,45 +163,49 @@ namespace ncnn {
             if (bias_term)
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        float* ptr = bottom_top_blob.channel(q);
 
-                        float s = scale_blob[q];
-                        float bias = bias_data[q];
+                    float* ptr = bottom_top_blob.channel(q);
 
-                        for (int i=0; i<size; i++)
-                        {
-                            ptr[i] = ptr[i] * s + bias;
-                        }
+                    float s = scale_blob[q];
+                    float bias = bias_data[q];
+
+                    for (int i=0; i<size; i++)
+                    {
+                        ptr[i] = ptr[i] * s + bias;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
             else
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        float* ptr = bottom_top_blob.channel(q);
 
-                        float s = scale_blob[q];
+                    float* ptr = bottom_top_blob.channel(q);
 
-                        for (int i=0; i<size; i++)
-                        {
-                            ptr[i] *= s;
-                        }
+                    float s = scale_blob[q];
+
+                    for (int i=0; i<size; i++)
+                    {
+                        ptr[i] *= s;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
         }
 

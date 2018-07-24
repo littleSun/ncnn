@@ -77,27 +77,58 @@ namespace ncnn {
         top_blob.create(4 * w * h * num_prior, 2, 4u, opt.blob_allocator);
 
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int i = 0; i < h; i++)
-        {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(h, get_gcd_concurrent(), ^(size_t i) {
+#else
+            for (int i = 0; i < h; i++) {
 #endif
-                float* box = (float*)top_blob + i * w * num_prior * 4;
 
-                float center_x = offset * step_w;
-                float center_y = offset * step_h + i * step_h;
+            float* box = (float*)top_blob + i * w * num_prior * 4;
 
-                for (int j = 0; j < w; j++)
+            float center_x = offset * step_w;
+            float center_y = offset * step_h + i * step_h;
+
+            for (int j = 0; j < w; j++)
+            {
+                float box_w;
+                float box_h;
+
+                for (int k = 0; k < num_min_size; k++)
                 {
-                    float box_w;
-                    float box_h;
+                    float min_size = min_sizes[k];
 
-                    for (int k = 0; k < num_min_size; k++)
+                    // min size box
+                    box_w = box_h = min_size;
+
+                    box[0] = (center_x - box_w * 0.5f) / image_w;
+                    box[1] = (center_y - box_h * 0.5f) / image_h;
+                    box[2] = (center_x + box_w * 0.5f) / image_w;
+                    box[3] = (center_y + box_h * 0.5f) / image_h;
+
+                    box += 4;
+
+                    if (num_max_size > 0)
                     {
-                        float min_size = min_sizes[k];
+                        float max_size = max_sizes[k];
 
-                        // min size box
-                        box_w = box_h = min_size;
+                        // max size box
+                        box_w = box_h = sqrt(min_size * max_size);
+
+                        box[0] = (center_x - box_w * 0.5f) / image_w;
+                        box[1] = (center_y - box_h * 0.5f) / image_h;
+                        box[2] = (center_x + box_w * 0.5f) / image_w;
+                        box[3] = (center_y + box_h * 0.5f) / image_h;
+
+                        box += 4;
+                    }
+
+                    // all aspect_ratios
+                    for (int p = 0; p < num_aspect_ratio; p++)
+                    {
+                        float ar = aspect_ratios[p];
+
+                        box_w = min_size * sqrt(ar);
+                        box_h = min_size / sqrt(ar);
 
                         box[0] = (center_x - box_w * 0.5f) / image_w;
                         box[1] = (center_y - box_h * 0.5f) / image_h;
@@ -106,56 +137,27 @@ namespace ncnn {
 
                         box += 4;
 
-                        if (num_max_size > 0)
+                        if (flip)
                         {
-                            float max_size = max_sizes[k];
-
-                            // max size box
-                            box_w = box_h = sqrt(min_size * max_size);
-
-                            box[0] = (center_x - box_w * 0.5f) / image_w;
-                            box[1] = (center_y - box_h * 0.5f) / image_h;
-                            box[2] = (center_x + box_w * 0.5f) / image_w;
-                            box[3] = (center_y + box_h * 0.5f) / image_h;
+                            box[0] = (center_x - box_h * 0.5f) / image_w;
+                            box[1] = (center_y - box_w * 0.5f) / image_h;
+                            box[2] = (center_x + box_h * 0.5f) / image_w;
+                            box[3] = (center_y + box_w * 0.5f) / image_h;
 
                             box += 4;
-                        }
-
-                        // all aspect_ratios
-                        for (int p = 0; p < num_aspect_ratio; p++)
-                        {
-                            float ar = aspect_ratios[p];
-
-                            box_w = min_size * sqrt(ar);
-                            box_h = min_size / sqrt(ar);
-
-                            box[0] = (center_x - box_w * 0.5f) / image_w;
-                            box[1] = (center_y - box_h * 0.5f) / image_h;
-                            box[2] = (center_x + box_w * 0.5f) / image_w;
-                            box[3] = (center_y + box_h * 0.5f) / image_h;
-
-                            box += 4;
-
-                            if (flip)
-                            {
-                                box[0] = (center_x - box_h * 0.5f) / image_w;
-                                box[1] = (center_y - box_w * 0.5f) / image_h;
-                                box[2] = (center_x + box_h * 0.5f) / image_w;
-                                box[3] = (center_y + box_w * 0.5f) / image_h;
-
-                                box += 4;
-                            }
                         }
                     }
-
-                    center_x += step_w;
                 }
 
-                center_y += step_h;
+                center_x += step_w;
+            }
+
+            center_y += step_h;
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         if (clip)
         {

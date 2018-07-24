@@ -106,72 +106,76 @@ namespace ncnn {
             if (pooling_type == PoolMethod_MAX)
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        const Mat m(w, h, bottom_blob_bordered.channel(q));
-                        float* outptr = pyramid_ptr + outh * outw * q;
 
-                        for (int i = 0; i < outh; i++)
+                    const Mat m(w, h, bottom_blob_bordered.channel(q));
+                    float* outptr = pyramid_ptr + outh * outw * q;
+
+                    for (int i = 0; i < outh; i++)
+                    {
+                        for (int j = 0; j < outw; j++)
                         {
-                            for (int j = 0; j < outw; j++)
+                            const float* sptr = m.row(i*stride_h) + j*stride_w;
+
+                            float max = sptr[0];
+
+                            for (int k = 0; k < maxk; k++)
                             {
-                                const float* sptr = m.row(i*stride_h) + j*stride_w;
-
-                                float max = sptr[0];
-
-                                for (int k = 0; k < maxk; k++)
-                                {
-                                    float val = sptr[ space_ofs[k] ];
-                                    max = std::max(max, val);
-                                }
-
-                                outptr[j] = max;
+                                float val = sptr[ space_ofs[k] ];
+                                max = std::max(max, val);
                             }
 
-                            outptr += outw;
+                            outptr[j] = max;
                         }
+
+                        outptr += outw;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
             else if (pooling_type == PoolMethod_AVE)
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        const Mat m(w, h, bottom_blob_bordered.channel(q));
-                        float* outptr = pyramid_ptr + outh * outw * q;
 
-                        for (int i = 0; i < outh; i++)
+                    const Mat m(w, h, bottom_blob_bordered.channel(q));
+                    float* outptr = pyramid_ptr + outh * outw * q;
+
+                    for (int i = 0; i < outh; i++)
+                    {
+                        for (int j = 0; j < outw; j++)
                         {
-                            for (int j = 0; j < outw; j++)
+                            const float* sptr = m.row(i*stride_h) + j*stride_w;
+
+                            float sum = 0;
+
+                            for (int k = 0; k < maxk; k++)
                             {
-                                const float* sptr = m.row(i*stride_h) + j*stride_w;
-
-                                float sum = 0;
-
-                                for (int k = 0; k < maxk; k++)
-                                {
-                                    float val = sptr[ space_ofs[k] ];
-                                    sum += val;
-                                }
-
-                                outptr[j] = sum / maxk;
+                                float val = sptr[ space_ofs[k] ];
+                                sum += val;
                             }
 
-                            outptr += outw;
+                            outptr[j] = sum / maxk;
                         }
+
+                        outptr += outw;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
 
             pyramid_ptr += channels * outh * outw;

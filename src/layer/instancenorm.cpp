@@ -55,38 +55,40 @@ namespace ncnn {
         int size = w * h;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<channels; q++) {
 #endif
-                float* ptr = bottom_top_blob.channel(q);
 
-                // mean and var
-                float sum = 0.f;
-                float sqsum = 0.f;
-                for (int i=0; i<size; i++)
-                {
-                    sum += ptr[i];
-                    sqsum += ptr[i] * ptr[i];
-                }
-                float mean = sum / size;
-                float var = sqsum / size - mean * mean;
+            float* ptr = bottom_top_blob.channel(q);
 
-                float gamma = gamma_data[q];
-                float beta = beta_data[q];
+            // mean and var
+            float sum = 0.f;
+            float sqsum = 0.f;
+            for (int i=0; i<size; i++)
+            {
+                sum += ptr[i];
+                sqsum += ptr[i] * ptr[i];
+            }
+            float mean = sum / size;
+            float var = sqsum / size - mean * mean;
 
-                float a = gamma / (sqrt(var) + eps);
-                float b = - mean * a + beta;
+            float gamma = gamma_data[q];
+            float beta = beta_data[q];
 
-                for (int i=0; i<size; i++)
-                {
-                    ptr[i] = ptr[i] * a + b;
-                }
+            float a = gamma / (sqrt(var) + eps);
+            float b = - mean * a + beta;
+
+            for (int i=0; i<size; i++)
+            {
+                ptr[i] = ptr[i] * a + b;
+            }
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         return 0;
     }

@@ -160,49 +160,53 @@ namespace ncnn {
                 }
 
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int c = 0; c < bottom_blob.c; c ++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(bottom_blob.c, get_gcd_concurrent(), ^(size_t c) {
+#else
+                    for (int c = 0; c < bottom_blob.c; c ++) {
 #endif
-                        float *outptr = inner_bottom_blob.channel(c);
 
-                        for (int i = 0; i < inner_h; i ++)
+                    float *outptr = inner_bottom_blob.channel(c);
+
+                    for (int i = 0; i < inner_h; i ++)
+                    {
+                        const float *ptr = (const float *) bottom_blob_bordered.channel(c) + dilation * i * w + x * w + y;
+                        for (int j = 0; j < inner_w; j ++)
                         {
-                            const float *ptr = (const float *) bottom_blob_bordered.channel(c) + dilation * i * w + x * w + y;
-                            for (int j = 0; j < inner_w; j ++)
-                            {
-                                outptr[j] = ptr[j*dilation];
-                            }
-                            outptr += inner_w;
+                            outptr[j] = ptr[j*dilation];
                         }
+                        outptr += inner_w;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
 
                 conv(inner_bottom_blob, inner_top_blob, weight_data, bias_data, opt);
 
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int c = 0; c < num_output; c ++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(num_output, get_gcd_concurrent(), ^(size_t c) {
+#else
+                    for (int c = 0; c < num_output; c ++) {
 #endif
-                        float *outptr = (float *) top_blob.channel(c) + x * outw + y;
-                        for (int i = 0; i < inner_outh; i ++)
+
+                    float *outptr = (float *) top_blob.channel(c) + x * outw + y;
+                    for (int i = 0; i < inner_outh; i ++)
+                    {
+                        const float *ptr = (const float *) inner_top_blob.channel(c) + i * inner_outw;
+                        for (int j = 0; j < inner_outw; j ++)
                         {
-                            const float *ptr = (const float *) inner_top_blob.channel(c) + i * inner_outw;
-                            for (int j = 0; j < inner_outw; j ++)
-                            {
-                                outptr[j*dilation] = ptr[j];
-                            }
-                            outptr += dilation * outw;
+                            outptr[j*dilation] = ptr[j];
                         }
+                        outptr += dilation * outw;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
         }
 

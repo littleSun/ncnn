@@ -83,18 +83,19 @@ namespace ncnn {
             float* ptr = bottom_top_blob;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int i=0; i<w; i++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(w, get_gcd_concurrent(), ^(size_t i) {
+#else
+                for (int i=0; i<w; i++) {
 #endif
 
-                    ptr[i] = b_data[i] * ptr[i] + a_data[i];
+                ptr[i] = b_data[i] * ptr[i] + a_data[i];
 
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
         }
 
         if (dims == 2)
@@ -103,26 +104,26 @@ namespace ncnn {
             int h = bottom_top_blob.h;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int i=0; i<h; i++)
-            {
-
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(h, get_gcd_concurrent(), ^(size_t i) {
+#else
+                for (int i=0; i<h; i++) {
 #endif
 
-                    float* ptr = bottom_top_blob.row(i);
-                    float a = a_data[i];
-                    float b = b_data[i];
 
-                    for (int j=0; j<w; j++)
-                    {
-                        ptr[j] = b * ptr[j] + a;
-                    }
+                float* ptr = bottom_top_blob.row(i);
+                float a = a_data[i];
+                float b = b_data[i];
+
+                for (int j=0; j<w; j++)
+                {
+                    ptr[j] = b * ptr[j] + a;
+                }
 #if __APPLE__
-                });
-#endif
-
+            });
+#else
             }
+#endif
         }
 
         if (dims == 3)
@@ -132,26 +133,26 @@ namespace ncnn {
             int size = w * h;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
-#endif
-
-                    float* ptr = bottom_top_blob.channel(q);
-                    float a = a_data[q];
-                    float b = b_data[q];
-
-                    for (int i=0; i<size; i++)
-                    {
-                        ptr[i] = b * ptr[i] + a;
-                    }
-#if __APPLE__
-                });
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
 
 
+                float* ptr = bottom_top_blob.channel(q);
+                float a = a_data[q];
+                float b = b_data[q];
+
+                for (int i=0; i<size; i++)
+                {
+                    ptr[i] = b * ptr[i] + a;
+                }
+#if __APPLE__
+            });
+#else
             }
+#endif
         }
 
         return 0;

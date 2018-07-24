@@ -71,24 +71,25 @@ namespace ncnn {
                 return -100;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = bottom_blob.channel(q);
+                const float* ptr = bottom_blob.channel(q);
 
-                    float ssum = 0.f;
-                    for (int i=0; i<size; i++)
-                    {
-                        ssum += ptr[i] * ptr[i];
-                    }
+                float ssum = 0.f;
+                for (int i=0; i<size; i++)
+                {
+                    ssum += ptr[i] * ptr[i];
+                }
 
-                    square_sum_blob[q] = ssum;
+                square_sum_blob[q] = ssum;
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
             // sum + eps
             float ssum = eps;
@@ -105,43 +106,47 @@ namespace ncnn {
                 float scale = a * scale_data[0];
 
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        const float* ptr = bottom_blob.channel(q);
-                        float* outptr = top_blob.channel(q);
 
-                        for (int i=0; i<size; i++)
-                        {
-                            outptr[i] = ptr[i] * scale;
-                        }
+                    const float* ptr = bottom_blob.channel(q);
+                    float* outptr = top_blob.channel(q);
+
+                    for (int i=0; i<size; i++)
+                    {
+                        outptr[i] = ptr[i] * scale;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
             else
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        const float* ptr = bottom_blob.channel(q);
-                        float* outptr = top_blob.channel(q);
-                        float scale = a * scale_data[q];
 
-                        for (int i=0; i<size; i++)
-                        {
-                            outptr[i] = ptr[i] * scale;
-                        }
+                    const float* ptr = bottom_blob.channel(q);
+                    float* outptr = top_blob.channel(q);
+                    float scale = a * scale_data[q];
+
+                    for (int i=0; i<size; i++)
+                    {
+                        outptr[i] = ptr[i] * scale;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
 
             return 0;
@@ -150,31 +155,32 @@ namespace ncnn {
         if (across_spatial && !across_channel)
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q=0; q<channels; q++)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q=0; q<channels; q++) {
 #endif
-                    const float* ptr = bottom_blob.channel(q);
-                    float* outptr = top_blob.channel(q);
+                const float* ptr = bottom_blob.channel(q);
+                float* outptr = top_blob.channel(q);
 
-                    float ssum = eps;
-                    for (int i=0; i<size; i++)
-                    {
-                        ssum += ptr[i] * ptr[i];
-                    }
+                float ssum = eps;
+                for (int i=0; i<size; i++)
+                {
+                    ssum += ptr[i] * ptr[i];
+                }
 
-                    float a = 1.f / sqrt(ssum);
-                    float scale = a * (channel_shared ? scale_data[0] : scale_data[q]);
+                float a = 1.f / sqrt(ssum);
+                float scale = a * (channel_shared ? scale_data[0] : scale_data[q]);
 
-                    for (int i=0; i<size; i++)
-                    {
-                        outptr[i] = ptr[i] * scale;
-                    }
+                for (int i=0; i<size; i++)
+                {
+                    outptr[i] = ptr[i] * scale;
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
 
             return 0;
         }
@@ -197,81 +203,89 @@ namespace ncnn {
                 float scale = scale_data[0];
 
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int i=0; i<size; i++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(size, get_gcd_concurrent(), ^(size_t i) {
+#else
+                    for (int i=0; i<size; i++) {
 #endif
-                        float ssum = eps;
-                        for (int q=0; q<channels; q++)
-                        {
-                            const float* ptr = bottom_blob.channel(q);
-                            ssum += ptr[i] * ptr[i];
-                        }
 
-                        square_sum_blob[i] = 1.f / sqrt(ssum) * scale;
+                    float ssum = eps;
+                    for (int q=0; q<channels; q++)
+                    {
+                        const float* ptr = bottom_blob.channel(q);
+                        ssum += ptr[i] * ptr[i];
+                    }
+
+                    square_sum_blob[i] = 1.f / sqrt(ssum) * scale;
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
 
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        const float* ptr = bottom_blob.channel(q);
-                        float* outptr = top_blob.channel(q);
 
-                        for (int i=0; i<size; i++)
-                        {
-                            outptr[i] = ptr[i] * square_sum_blob[i];
-                        }
+                    const float* ptr = bottom_blob.channel(q);
+                    float* outptr = top_blob.channel(q);
+
+                    for (int i=0; i<size; i++)
+                    {
+                        outptr[i] = ptr[i] * square_sum_blob[i];
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
             else
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int i=0; i<size; i++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(size, get_gcd_concurrent(), ^(size_t i) {
+#else
+                    for (int i=0; i<size; i++) {
 #endif
-                        float ssum = eps;
-                        for (int q=0; q<channels; q++)
-                        {
-                            const float* ptr = bottom_blob.channel(q);
-                            ssum += ptr[i] * ptr[i];
-                        }
 
-                        square_sum_blob[i] = 1.f / sqrt(ssum);
+                    float ssum = eps;
+                    for (int q=0; q<channels; q++)
+                    {
+                        const float* ptr = bottom_blob.channel(q);
+                        ssum += ptr[i] * ptr[i];
+                    }
+
+                    square_sum_blob[i] = 1.f / sqrt(ssum);
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
 
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
 #if __APPLE__
-                    dispatch_async(get_gcd_concurrent(), ^{
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
 #endif
-                        const float* ptr = bottom_blob.channel(q);
-                        float* outptr = top_blob.channel(q);
-                        float scale = scale_data[q];
 
-                        for (int i=0; i<size; i++)
-                        {
-                            outptr[i] = ptr[i] * square_sum_blob[i] * scale;
-                        }
+                    const float* ptr = bottom_blob.channel(q);
+                    float* outptr = top_blob.channel(q);
+                    float scale = scale_data[q];
+
+                    for (int i=0; i<size; i++)
+                    {
+                        outptr[i] = ptr[i] * square_sum_blob[i] * scale;
+                    }
 #if __APPLE__
-                    });
-#endif
+                });
+#else
                 }
+#endif
             }
 
             return 0;

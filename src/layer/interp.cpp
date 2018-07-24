@@ -67,44 +67,46 @@ namespace ncnn {
         if (bottom_blob.dims == 1)
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q = 0; q < c; ++q)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(c, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q = 0; q < c; ++q) {
 #endif
-                    Mat top_blob_c = top_blob.channel(q);
-                    const float *ptr = ((const float*)bottom_blob.data + q);
-                    top_blob_c.fill(*ptr);
+
+                Mat top_blob_c = top_blob.channel(q);
+                const float *ptr = ((const float*)bottom_blob.data + q);
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
             return 0;
         }
 
         if (resize_type == 1)//nearest
         {
 #pragma omp parallel for num_threads(opt.num_threads)
-            for (int q = 0; q < c; ++q)
-            {
 #if __APPLE__
-                dispatch_async(get_gcd_concurrent(), ^{
+            dispatch_apply(c, get_gcd_concurrent(), ^(size_t q) {
+#else
+                for (int q = 0; q < c; ++q) {
 #endif
-                    const float *ptr = bottom_blob.channel(q);
-                    float *output_ptr = top_blob.channel(q);
-                    for (int y = 0; y < oh; ++y)
+                const float *ptr = bottom_blob.channel(q);
+                float *output_ptr = top_blob.channel(q);
+                for (int y = 0; y < oh; ++y)
+                {
+                    const int in_y = std::min((int) (y / height_scale), (h - 1));
+                    for (int x = 0; x < ow; ++x)
                     {
-                        const int in_y = std::min((int) (y / height_scale), (h - 1));
-                        for (int x = 0; x < ow; ++x)
-                        {
-                            const int in_x = std::min((int) (x / width_scale), (w - 1));
-                            output_ptr[ow * y + x] = ptr[in_y * w + in_x];
-                        }
+                        const int in_x = std::min((int) (x / width_scale), (w - 1));
+                        output_ptr[ow * y + x] = ptr[in_y * w + in_x];
                     }
+                }
 #if __APPLE__
-                });
-#endif
+            });
+#else
             }
+#endif
             return 0;
 
         }

@@ -39,11 +39,13 @@ namespace ncnn {
         const float* a_data_ptr = a_data;
         const float* b_data_ptr = b_data;
 #pragma omp parallel for num_threads(opt.num_threads)
-        for (int q=0; q<channels; q++)
-        {
+
 #if __APPLE__
-            dispatch_async(get_gcd_concurrent(), ^{
+        dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+        for (int q=0; q<channels; q++) {
 #endif
+
                 float* ptr = bottom_top_blob.channel(q);
 
                 float a = a_data_ptr[q];
@@ -112,9 +114,10 @@ namespace ncnn {
                     ptr++;
                 }
 #if __APPLE__
-            });
-#endif
+        });
+#else
         }
+#endif
 
         return 0;
     }

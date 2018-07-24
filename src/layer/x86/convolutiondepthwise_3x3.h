@@ -24,9 +24,13 @@ static void convdw3x3s1_sse(const Mat& bottom_blob, Mat& top_blob, const Mat& _k
     const float* kernel = _kernel;
     const float* bias = _bias;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int g=0; g<group; g++)
-    {
+#pragma omp parallel for num_threads(opt.num_threads)
+#if __APPLE__
+    dispatch_apply(group, get_gcd_concurrent(), ^(size_t g) {
+#else
+        for (int g=0; g<group; g++) {
+#endif
+
         Mat out = top_blob.channel(g);
 
         const float bias0 = bias ? bias[g] : 0.f;
@@ -127,7 +131,11 @@ static void convdw3x3s1_sse(const Mat& bottom_blob, Mat& top_blob, const Mat& _k
             r1 += 2;
             r2 += 2;
         }
+#if __APPLE__
+    });
+#else
     }
+#endif
 }
 
 static void convdw3x3s2_sse(const Mat& bottom_blob, Mat& top_blob, const Mat& _kernel, const Mat& _bias, const Option& opt)
@@ -144,9 +152,13 @@ static void convdw3x3s2_sse(const Mat& bottom_blob, Mat& top_blob, const Mat& _k
     const float* kernel = _kernel;
     const float* bias = _bias;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int g=0; g<group; g++)
-    {
+#pragma omp parallel for num_threads(opt.num_threads)
+#if __APPLE__
+    dispatch_apply(group, get_gcd_concurrent(), ^(size_t g) {
+#else
+        for (int g=0; g<group; g++) {
+#endif
+
         Mat out = top_blob.channel(g);
 
         const float bias0 = bias ? bias[g] : 0.f;
@@ -197,5 +209,9 @@ static void convdw3x3s2_sse(const Mat& bottom_blob, Mat& top_blob, const Mat& _k
             r2 += tailstep;
         }
 
+#if __APPLE__
+    });
+#else
     }
+#endif
 }

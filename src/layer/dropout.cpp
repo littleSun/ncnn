@@ -16,51 +16,53 @@
 
 namespace ncnn {
 
-DEFINE_LAYER_CREATOR(Dropout)
+    DEFINE_LAYER_CREATOR(Dropout)
 
-Dropout::Dropout()
-{
-    one_blob_only = true;
-    support_inplace = true;
-}
-
-int Dropout::load_param(const ParamDict& pd)
-{
-    scale = pd.get(0, 1.f);
-
-    return 0;
-}
-
-int Dropout::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
-{
-    if (scale == 1.f)
+    Dropout::Dropout()
     {
+        one_blob_only = true;
+        support_inplace = true;
+    }
+
+    int Dropout::load_param(const ParamDict& pd)
+    {
+        scale = pd.get(0, 1.f);
+
         return 0;
     }
 
-    int w = bottom_top_blob.w;
-    int h = bottom_top_blob.h;
-    int channels = bottom_top_blob.c;
-    int size = w * h;
-
-    #pragma omp parallel for num_threads(opt.num_threads)
-    for (int q=0; q<channels; q++)
+    int Dropout::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
     {
-#if __APPLE__
-        dispatch_async(get_gcd_concurrent(), ^{
-#endif
-        float* ptr = bottom_top_blob.channel(q);
-
-        for (int i=0; i<size; i++)
+        if (scale == 1.f)
         {
-            ptr[i] = ptr[i] * scale;
+            return 0;
         }
+
+        int w = bottom_top_blob.w;
+        int h = bottom_top_blob.h;
+        int channels = bottom_top_blob.c;
+        int size = w * h;
+
+#pragma omp parallel for num_threads(opt.num_threads)
+#if __APPLE__
+        dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+            for (int q=0; q<channels; q++) {
+#endif
+
+            float* ptr = bottom_top_blob.channel(q);
+
+            for (int i=0; i<size; i++)
+            {
+                ptr[i] = ptr[i] * scale;
+            }
 #if __APPLE__
         });
+#else
+        }
 #endif
-    }
 
-    return 0;
-}
+        return 0;
+    }
 
 } // namespace ncnn
