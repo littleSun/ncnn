@@ -38,8 +38,8 @@ namespace ncnn {
 
         const float* a_data_ptr = a_data;
         const float* b_data_ptr = b_data;
-#pragma omp parallel for num_threads(opt.num_threads)
 
+#pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
         dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
 #else

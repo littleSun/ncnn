@@ -34,7 +34,7 @@ static void conv4x4s4_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
 #if __APPLE__
     dispatch_apply(outch, get_gcd_concurrent(), ^(size_t p) {
 #else
-        for (int q=0; q<inch; q++) {
+        for (int p=0; p<outch; p++) {
 #endif
 
         Mat out = top_blob.channel(p);

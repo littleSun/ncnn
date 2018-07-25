@@ -730,8 +730,6 @@ static void conv7x7s2_neon(const Mat& bottom_blob, Mat& top_blob, const Mat& _ke
     const float* bias = _bias;
 
 #pragma omp parallel for num_threads(opt.num_threads)
-
-
 #if __APPLE__
     dispatch_apply(outch, get_gcd_concurrent(), ^(size_t p) {
 #else

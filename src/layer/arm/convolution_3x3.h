@@ -665,8 +665,7 @@ static void conv3x3s1_neon(const Mat &bottom_blob, Mat &top_blob, const Mat &_ke
     dispatch_apply(outch - remain_outch_start, get_gcd_concurrent(), ^(size_t p_) {
         int p = p_ + remain_outch_start;
 #else
-        for (int p = remain_outch_start; p < outch; p++)
-    {
+     for (int p = remain_outch_start; p < outch; p++) {
 #endif
 
         Mat out = top_blob.channel(p);
