@@ -37,7 +37,7 @@ namespace ncnn {
 
 #pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-        dispatch_apply(inch, get_gcd_concurrent(), ^(size_t q) {
+        dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
 #else
             for (int q=0; q<channels; q++) {
 #endif
