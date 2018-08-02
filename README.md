@@ -24,11 +24,11 @@ make && make install
 cd ..
 mkdir -p ncnn.framework/Versions/A/Headers
 mkdir -p ncnn.framework/Versions/A/Resources
+lipo -create ios-build/install/lib/libncnn.a ios-sim-build/install/lib/libncnn.a -o ncnn.framework/Versions/A/ncnn
 ln -s A ncnn.framework/Versions/Current
 ln -s Versions/Current/Headers ncnn.framework/Headers
 ln -s Versions/Current/Resources ncnn.framework/Resources
 ln -s Versions/Current/ncnn ncnn.framework/ncnn
-lipo -create ios-build/install/lib/libncnn.a ios-build-sim/install/lib/libncnn.a -o ncnn.framework/Versions/A/ncnn
 cp -r ios-sim-build/install/include/* ncnn.framework/Versions/A/Headers/
 cp Info.plist ncnn.framework/Versions/A/Resources/
 ```

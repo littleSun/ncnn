@@ -28,12 +28,10 @@
 #endif
 
 #if __APPLE__
-#if TARGET_OS_IPHONE
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #include <mach/machine.h>
 #define __IOS__ 1
-#endif
 #endif
 
 namespace ncnn {
