@@ -20,73 +20,79 @@
 
 namespace ncnn {
 
-    DEFINE_LAYER_CREATOR(InnerProduct_arm)
+DEFINE_LAYER_CREATOR(InnerProduct_arm)
 
-    int InnerProduct_arm::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
+int InnerProduct_arm::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
+{
+    if (use_int8_inference)
     {
-        int w = bottom_blob.w;
-        int h = bottom_blob.h;
-        int channels = bottom_blob.c;
-        size_t elemsize = bottom_blob.elemsize;
-        int size = w * h;
+        // TODO
+        return InnerProduct::forward(bottom_blob, top_blob, opt);
+    }
 
-        top_blob.create(num_output, elemsize, opt.blob_allocator);
-        if (top_blob.empty())
-            return -100;
+    int w = bottom_blob.w;
+    int h = bottom_blob.h;
+    int channels = bottom_blob.c;
+    size_t elemsize = bottom_blob.elemsize;
+    int size = w * h;
 
-        const float* weight_data_ptr = weight_data;
+    top_blob.create(num_output, elemsize, opt.blob_allocator);
+    if (top_blob.empty())
+        return -100;
 
-        int nn_num_output = num_output >> 2;
-        int remain_num_output_start = nn_num_output << 2;
+    const float* weight_data_ptr = weight_data;
 
-#pragma omp parallel for num_threads(opt.num_threads)
+    int nn_num_output = num_output >> 2;
+    int remain_num_output_start = nn_num_output << 2;
+
+    #pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-        dispatch_apply(nn_num_output, get_gcd_concurrent(), ^(size_t pp) {
+    dispatch_apply(nn_num_output, get_gcd_concurrent(), ^(size_t pp) {
 #else
-            for (int pp=0; pp<nn_num_output; pp++) {
+        for (int pp=0; pp<nn_num_output; pp++) {
 #endif
 
-            int p = pp * 4;
+        int p = pp * 4;
 
-            float sum0 = 0.f;
-            float sum1 = 0.f;
-            float sum2 = 0.f;
-            float sum3 = 0.f;
+        float sum0 = 0.f;
+        float sum1 = 0.f;
+        float sum2 = 0.f;
+        float sum3 = 0.f;
 
-            if (bias_term)
-            {
-                sum0 = bias_data[p];
-                sum1 = bias_data[p+1];
-                sum2 = bias_data[p+2];
-                sum3 = bias_data[p+3];
-            }
+        if (bias_term)
+        {
+            sum0 = bias_data[p];
+            sum1 = bias_data[p+1];
+            sum2 = bias_data[p+2];
+            sum3 = bias_data[p+3];
+        }
 
-            const float* w0 = weight_data_ptr + size * channels * p;
-            const float* w1 = weight_data_ptr + size * channels * (p+1);
-            const float* w2 = weight_data_ptr + size * channels * (p+2);
-            const float* w3 = weight_data_ptr + size * channels * (p+3);
+        const float* w0 = weight_data_ptr + size * channels * p;
+        const float* w1 = weight_data_ptr + size * channels * (p+1);
+        const float* w2 = weight_data_ptr + size * channels * (p+2);
+        const float* w3 = weight_data_ptr + size * channels * (p+3);
 
 #if __ARM_NEON
-            float32x4_t _sum0 = vdupq_n_f32(0.f);
+        float32x4_t _sum0 = vdupq_n_f32(0.f);
         float32x4_t _sum1 = vdupq_n_f32(0.f);
         float32x4_t _sum2 = vdupq_n_f32(0.f);
         float32x4_t _sum3 = vdupq_n_f32(0.f);
 #endif // __ARM_NEON
 
-            // channels
-            for (int q=0; q<channels; q++)
-            {
-                const float* m = bottom_blob.channel(q);
+        // channels
+        for (int q=0; q<channels; q++)
+        {
+            const float* m = bottom_blob.channel(q);
 
 #if __ARM_NEON
-                int nn = size >> 2;
+            int nn = size >> 2;
             int remain = size & 3;
 #else
-                int remain = size;
+            int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                for (; nn>0; nn--)
+            for (; nn>0; nn--)
             {
                 float32x4_t _m = vld1q_f32(m);
 
@@ -109,24 +115,24 @@ namespace ncnn {
                 w3 += 4;
             }
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    sum0 += *m * *w0;
-                    sum1 += *m * *w1;
-                    sum2 += *m * *w2;
-                    sum3 += *m * *w3;
+            for (; remain>0; remain--)
+            {
+                sum0 += *m * *w0;
+                sum1 += *m * *w1;
+                sum2 += *m * *w2;
+                sum3 += *m * *w3;
 
-                    m++;
-                    w0++;
-                    w1++;
-                    w2++;
-                    w3++;
-                }
-
+                m++;
+                w0++;
+                w1++;
+                w2++;
+                w3++;
             }
 
+        }
+
 #if __ARM_NEON
-            float32x2_t _sum0ss = vadd_f32(vget_low_f32(_sum0), vget_high_f32(_sum0));
+        float32x2_t _sum0ss = vadd_f32(vget_low_f32(_sum0), vget_high_f32(_sum0));
         float32x2_t _sum1ss = vadd_f32(vget_low_f32(_sum1), vget_high_f32(_sum1));
         float32x2_t _sum2ss = vadd_f32(vget_low_f32(_sum2), vget_high_f32(_sum2));
         float32x2_t _sum3ss = vadd_f32(vget_low_f32(_sum3), vget_high_f32(_sum3));
@@ -141,52 +147,52 @@ namespace ncnn {
 
 #endif // __ARM_NEON
 
-            top_blob[p] = sum0;
-            top_blob[p+1] = sum1;
-            top_blob[p+2] = sum2;
-            top_blob[p+3] = sum3;
+        top_blob[p] = sum0;
+        top_blob[p+1] = sum1;
+        top_blob[p+2] = sum2;
+        top_blob[p+3] = sum3;
 #if __APPLE__
-        });
+    });
 #else
-        }
+    }
 #endif
 
-        // num_output
-#pragma omp parallel for num_threads(opt.num_threads)
+    // num_output
+    #pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-        dispatch_apply(num_output-remain_num_output_start, get_gcd_concurrent(), ^(size_t p_) {
-            int p = p_+remain_num_output_start;
+    dispatch_apply(num_output-remain_num_output_start, get_gcd_concurrent(), ^(size_t p_) {
+
+        p = p_+remain_num_output_start;
 #else
-            for (int p=remain_num_output_start; p<num_output; p++) {
+        for (int p=remain_num_output_start; p<num_output; p++) {
 #endif
 
+        float sum = 0.f;
 
-            float sum = 0.f;
+        if (bias_term)
+            sum = bias_data[p];
 
-            if (bias_term)
-                sum = bias_data[p];
-
-            const float* w = weight_data_ptr + size * channels * p;
+        const float* w = weight_data_ptr + size * channels * p;
 
 #if __ARM_NEON
-            float32x4_t _sum = vdupq_n_f32(0.f);
+        float32x4_t _sum = vdupq_n_f32(0.f);
         float32x4_t _sum2 = vdupq_n_f32(0.f);
 #endif // __ARM_NEON
 
-            // channels
-            for (int q=0; q<channels; q++)
-            {
-                const float* m = bottom_blob.channel(q);
+        // channels
+        for (int q=0; q<channels; q++)
+        {
+            const float* m = bottom_blob.channel(q);
 
 #if __ARM_NEON
-                int nn = size >> 3;
+            int nn = size >> 3;
             int remain = size & 7;
 #else
-                int remain = size;
+            int remain = size;
 #endif // __ARM_NEON
 
 #if __ARM_NEON
-                #if __aarch64__
+#if __aarch64__
             if (nn > 0)
             {
             asm volatile(
@@ -240,17 +246,17 @@ namespace ncnn {
             }
 #endif // __aarch64__
 #endif // __ARM_NEON
-                for (; remain>0; remain--)
-                {
-                    sum += *m * *w;
+            for (; remain>0; remain--)
+            {
+                sum += *m * *w;
 
-                    m++;
-                    w++;
-                }
+                m++;
+                w++;
             }
+        }
 
 #if __ARM_NEON
-            _sum = vaddq_f32(_sum, _sum2);
+        _sum = vaddq_f32(_sum, _sum2);
 #if __aarch64__
         sum += vaddvq_f32(_sum);
 #else
@@ -260,14 +266,14 @@ namespace ncnn {
 #endif // __aarch64__
 #endif // __ARM_NEON
 
-            top_blob[p] = sum;
+        top_blob[p] = sum;
 #if __APPLE__
-        });
+    });
 #else
-        }
+    }
 #endif
 
-        return 0;
-    }
+    return 0;
+}
 
 } // namespace ncnn

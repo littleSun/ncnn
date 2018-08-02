@@ -22,6 +22,7 @@
 #include "modelbin.h"
 #include "paramdict.h"
 #include "platform.h"
+#include "cpu.h"
 
 namespace ncnn {
 
@@ -36,6 +37,9 @@ public:
     int num_threads;
     Allocator* blob_allocator;
     Allocator* workspace_allocator;
+
+public:
+    std::vector<float> int8_scales;
 };
 
 const Option& get_default_option();

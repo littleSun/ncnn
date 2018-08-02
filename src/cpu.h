@@ -18,7 +18,7 @@
 #if __APPLE__
 #include <dispatch/dispatch.h>
 #include <dispatch/queue.h>
-
+#undef _OPENMP
 #endif
 
 

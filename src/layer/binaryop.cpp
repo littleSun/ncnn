@@ -67,8 +67,12 @@ namespace ncnn {
             if (b.dims == 3)
             {
 #pragma omp parallel for num_threads(opt.num_threads)
-                for (int q=0; q<channels; q++)
-                {
+#if __APPLE__
+                dispatch_apply(channels, get_gcd_concurrent(), ^(size_t q) {
+#else
+                    for (int q=0; q<channels; q++) {
+#endif
+
                     const float* ptr = a.channel(q);
                     const float* ptr1 = b.channel(q);
                     float* outptr = c.channel(q);
@@ -77,7 +81,11 @@ namespace ncnn {
                     {
                         outptr[i] = op(ptr[i], ptr1[i]);
                     }
+#if __APPLE__
+                });
+#else
                 }
+#endif
 
                 return 0;
             }

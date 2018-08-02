@@ -22,177 +22,174 @@
 
 namespace ncnn {
 
-    DEFINE_LAYER_CREATOR(DeconvolutionDepthWise_arm)
+DEFINE_LAYER_CREATOR(DeconvolutionDepthWise_arm)
 
-    int DeconvolutionDepthWise_arm::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
+int DeconvolutionDepthWise_arm::forward(const Mat& bottom_blob, Mat& top_blob, const Option& opt) const
+{
+    // convolv with NxN kernel
+    // value = value + bias
+
+    int w = bottom_blob.w;
+    int h = bottom_blob.h;
+    int channels = bottom_blob.c;
+    size_t elemsize = bottom_blob.elemsize;
+
+    if (channels % group != 0 || num_output % group != 0)
     {
-        // convolv with NxN kernel
-        // value = value + bias
+        // reject invalid group
+        return -100;
+    }
 
-        int w = bottom_blob.w;
-        int h = bottom_blob.h;
-        int channels = bottom_blob.c;
-        size_t elemsize = bottom_blob.elemsize;
+    const int kernel_extent_w = dilation_w * (kernel_w - 1) + 1;
+    const int kernel_extent_h = dilation_h * (kernel_h - 1) + 1;
 
-        if (channels % group != 0 || num_output % group != 0)
-        {
-            // reject invalid group
+    int outw = (w - 1) * stride_w + kernel_extent_w;
+    int outh = (h - 1) * stride_h + kernel_extent_h;
+
+    Mat top_blob_bordered;
+    if (pad_w > 0 || pad_h > 0)
+    {
+        top_blob_bordered.create(outw, outh, num_output, elemsize, opt.workspace_allocator);
+        if (top_blob_bordered.empty())
             return -100;
-        }
+    }
+    else
+    {
+        top_blob_bordered = top_blob;
+        top_blob_bordered.create(outw, outh, num_output, elemsize, opt.blob_allocator);
+        if (top_blob_bordered.empty())
+            return -100;
+    }
 
-        const int kernel_extent_w = dilation_w * (kernel_w - 1) + 1;
-        const int kernel_extent_h = dilation_h * (kernel_h - 1) + 1;
+    const int maxk = kernel_w * kernel_h;
 
-        int outw = (w - 1) * stride_w + kernel_extent_w;
-        int outh = (h - 1) * stride_h + kernel_extent_h;
-
-#if __APPLE__
-        __block Mat top_blob_bordered;
-#else
-        Mat top_blob_bordered;
-#endif
-        if (pad_w > 0 || pad_h > 0)
-        {
-            top_blob_bordered.create(outw, outh, num_output, elemsize, opt.workspace_allocator);
-            if (top_blob_bordered.empty())
-                return -100;
-        }
-        else
-        {
-            top_blob_bordered = top_blob;
-            top_blob_bordered.create(outw, outh, num_output, elemsize, opt.blob_allocator);
-            if (top_blob_bordered.empty())
-                return -100;
-        }
-
-        const int maxk = kernel_w * kernel_h;
-
-        // depth-wise
-        if (channels == group && group == num_output)
-        {
+    // depth-wise
+    if (channels == group && group == num_output)
+    {
 #ifdef _OPENMP
-            int nested_current = omp_get_nested();
+        int nested_current = omp_get_nested();
         omp_set_nested(0);
 #endif
 
-#pragma omp parallel for num_threads(opt.num_threads)
+
+        #pragma omp parallel for num_threads(opt.num_threads)
 #if __APPLE__
-            dispatch_apply(group, get_gcd_concurrent(), ^(size_t g) {
+        dispatch_apply(group, get_gcd_concurrent(), ^(size_t g) {
 #else
-                for (int g=0; g<group; g++) {
+            for (int g=0; g<group; g++) {
 #endif
 
-                Mat bottom_blob_g(w, h, 1, bottom_blob.channel(g).data);
-                Mat top_blob_bordered_g(outw, outh, 1, top_blob_bordered.channel(g));
-                Mat weight_data_g(maxk, (void*)((const float*)weight_data + maxk * g));
+            Mat bottom_blob_g(w, h, 1, bottom_blob.channel(g).data);
+            Mat top_blob_bordered_g(outw, outh, 1, top_blob_bordered.channel(g), top_blob.elemsize, top_blob.allocator);
+            Mat weight_data_g(maxk, (void*)((const float*)weight_data + maxk * g));
 
-                Mat bias_data_g;
-                if (bias_term)
-                    bias_data_g = Mat(1, (void*)((const float*)bias_data + g));
+            Mat bias_data_g;
+            if (bias_term)
+                bias_data_g = Mat(1, (void*)((const float*)bias_data + g));
 
-                // call Deconvolution
-                ncnn::Layer* op = ncnn::create_layer(ncnn::LayerType::Deconvolution);
+            // call Deconvolution
+            ncnn::Layer* op = ncnn::create_layer(ncnn::LayerType::Deconvolution);
 
-                // set param
-                ncnn::ParamDict pd;
-                pd.set(0, 1);// num_output
-                pd.set(1, kernel_w);
-                pd.set(11, kernel_h);
-                pd.set(2, dilation_w);
-                pd.set(12, dilation_h);
-                pd.set(3, stride_w);
-                pd.set(13, stride_h);
-                pd.set(4, 0);// pad_w
-                pd.set(14, 0);// pad_h
-                pd.set(5, bias_term);
-                pd.set(6, maxk);// weight_data_size
+            // set param
+            ncnn::ParamDict pd;
+            pd.set(0, 1);// num_output
+            pd.set(1, kernel_w);
+            pd.set(11, kernel_h);
+            pd.set(2, dilation_w);
+            pd.set(12, dilation_h);
+            pd.set(3, stride_w);
+            pd.set(13, stride_h);
+            pd.set(4, 0);// pad_w
+            pd.set(14, 0);// pad_h
+            pd.set(5, bias_term);
+            pd.set(6, maxk);// weight_data_size
 
-                op->load_param(pd);
+            op->load_param(pd);
 
-                // set weights
-                ncnn::Mat weights[2];
-                weights[0] = weight_data_g;
-                weights[1] = bias_data_g;
+            // set weights
+            ncnn::Mat weights[2];
+            weights[0] = weight_data_g;
+            weights[1] = bias_data_g;
 
-                op->load_model(ModelBinFromMatArray(weights));
+            op->load_model(ModelBinFromMatArray(weights));
 
-                // forward
-                op->forward(bottom_blob_g, top_blob_bordered_g, opt);
+            // forward
+            op->forward(bottom_blob_g, top_blob_bordered_g, opt);
 
-                delete op;
+            delete op;
 #if __APPLE__
-            });
+        });
 #else
-            }
+        }
 #endif
 
 #ifdef _OPENMP
-            omp_set_nested(nested_current);
+        omp_set_nested(nested_current);
 #endif
-        }
-        else
-        {
-            const int channels_g = channels / group;
-            const int num_output_g = num_output / group;
-
-            for (int g=0; g<group; g++)
-            {
-                Mat bottom_blob_g(w, h, channels_g, bottom_blob.channel(channels_g * g).data);
-                Mat top_blob_bordered_g(outw, outh, num_output_g, top_blob_bordered.channel(num_output_g * g));
-                Mat weight_data_g(maxk * channels_g * num_output_g, (void*)((const float*)weight_data + maxk * channels_g * num_output_g * g));
-                Mat bias_data_g;
-                if (bias_term)
-                    bias_data_g = Mat(num_output_g, (void*)((const float*)bias_data + num_output_g * g));
-
-                // call Deconvolution
-                ncnn::Layer* op = ncnn::create_layer(ncnn::LayerType::Deconvolution);
-
-                // set param
-                ncnn::ParamDict pd;
-                pd.set(0, num_output_g);// num_output
-                pd.set(1, kernel_w);
-                pd.set(11, kernel_h);
-                pd.set(2, dilation_w);
-                pd.set(12, dilation_h);
-                pd.set(3, stride_w);
-                pd.set(13, stride_h);
-                pd.set(4, 0);// pad_w
-                pd.set(14, 0);// pad_h
-                pd.set(5, bias_term);
-                pd.set(6, maxk * channels_g * num_output_g);// weight_data_size
-
-                op->load_param(pd);
-
-                // set weights
-                ncnn::Mat weights[2];
-                weights[0] = weight_data_g;
-                weights[1] = bias_data_g;
-
-                op->load_model(ModelBinFromMatArray(weights));
-
-                // forward
-                op->forward(bottom_blob_g, top_blob_bordered_g, opt);
-
-                delete op;
-            }
-        }
-
-        if (pad_w > 0 || pad_h > 0)
-        {
-            copy_cut_border(top_blob_bordered, top_blob, pad_h, pad_h, pad_w, pad_w, opt.blob_allocator, opt.num_threads);
-            if (top_blob.empty())
-                return -100;
-
-            outw = top_blob.w;
-            outh = top_blob.h;
-        }
-        else
-        {
-            top_blob = top_blob_bordered;
-        }
-
-        return 0;
-
     }
+    else
+    {
+        const int channels_g = channels / group;
+        const int num_output_g = num_output / group;
+
+        for (int g=0; g<group; g++)
+        {
+            Mat bottom_blob_g(w, h, channels_g, bottom_blob.channel(channels_g * g).data);
+            Mat top_blob_bordered_g(outw, outh, num_output_g, top_blob_bordered.channel(num_output_g * g), top_blob.elemsize, top_blob.allocator);
+            Mat weight_data_g(maxk * channels_g * num_output_g, (void*)((const float*)weight_data + maxk * channels_g * num_output_g * g));
+            Mat bias_data_g;
+            if (bias_term)
+                bias_data_g = Mat(num_output_g, (void*)((const float*)bias_data + num_output_g * g));
+
+            // call Deconvolution
+            ncnn::Layer* op = ncnn::create_layer(ncnn::LayerType::Deconvolution);
+
+            // set param
+            ncnn::ParamDict pd;
+            pd.set(0, num_output_g);// num_output
+            pd.set(1, kernel_w);
+            pd.set(11, kernel_h);
+            pd.set(2, dilation_w);
+            pd.set(12, dilation_h);
+            pd.set(3, stride_w);
+            pd.set(13, stride_h);
+            pd.set(4, 0);// pad_w
+            pd.set(14, 0);// pad_h
+            pd.set(5, bias_term);
+            pd.set(6, maxk * channels_g * num_output_g);// weight_data_size
+
+            op->load_param(pd);
+
+            // set weights
+            ncnn::Mat weights[2];
+            weights[0] = weight_data_g;
+            weights[1] = bias_data_g;
+
+            op->load_model(ModelBinFromMatArray(weights));
+
+            // forward
+            op->forward(bottom_blob_g, top_blob_bordered_g, opt);
+
+            delete op;
+        }
+    }
+
+    if (pad_w > 0 || pad_h > 0)
+    {
+        copy_cut_border(top_blob_bordered, top_blob, pad_h, pad_h, pad_w, pad_w, opt.blob_allocator, opt.num_threads);
+        if (top_blob.empty())
+            return -100;
+
+        outw = top_blob.w;
+        outh = top_blob.h;
+    }
+    else
+    {
+        top_blob = top_blob_bordered;
+    }
+
+    return 0;
+
+}
 
 } // namespace ncnn
