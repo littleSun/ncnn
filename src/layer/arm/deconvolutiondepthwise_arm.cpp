@@ -46,7 +46,12 @@ int DeconvolutionDepthWise_arm::forward(const Mat& bottom_blob, Mat& top_blob, c
     int outw = (w - 1) * stride_w + kernel_extent_w;
     int outh = (h - 1) * stride_h + kernel_extent_h;
 
+#if __APPLE__
+    __block Mat top_blob_bordered;
+#else
     Mat top_blob_bordered;
+#endif
+
     if (pad_w > 0 || pad_h > 0)
     {
         top_blob_bordered.create(outw, outh, num_output, elemsize, opt.workspace_allocator);

@@ -47,7 +47,12 @@ int ConvolutionDepthWise_x86::forward(const Mat& bottom_blob, Mat& top_blob, con
     const int kernel_extent_w = dilation_w * (kernel_w - 1) + 1;
     const int kernel_extent_h = dilation_h * (kernel_h - 1) + 1;
 
+#if __APPLE__
+    __block Mat bottom_blob_bordered = bottom_blob;
+#else
     Mat bottom_blob_bordered = bottom_blob;
+#endif
+
     if (pad_w > 0 || pad_h > 0)
     {
         copy_make_border(bottom_blob, bottom_blob_bordered, pad_h, pad_h, pad_w, pad_w, BORDER_CONSTANT, 0.f, opt.workspace_allocator, opt.num_threads);

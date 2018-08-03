@@ -162,7 +162,7 @@ int InnerProduct_arm::forward(const Mat& bottom_blob, Mat& top_blob, const Optio
 #if __APPLE__
     dispatch_apply(num_output-remain_num_output_start, get_gcd_concurrent(), ^(size_t p_) {
 
-        p = p_+remain_num_output_start;
+        int p = p_+remain_num_output_start;
 #else
         for (int p=remain_num_output_start; p<num_output; p++) {
 #endif

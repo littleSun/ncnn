@@ -36,7 +36,12 @@ namespace ncnn {
         const int dilation = dilation_w;
         const int kernel_extent = dilation * (kernel_size - 1) + 1;
 
+#if __APPLE__
+        __block Mat bottom_blob_bordered = bottom_blob;
+#else
         Mat bottom_blob_bordered = bottom_blob;
+#endif
+
         if (pad_w > 0 || pad_h > 0)
         {
             copy_make_border(bottom_blob, bottom_blob_bordered, pad_h, pad_h, pad_w, pad_w, BORDER_CONSTANT, 0.f, opt.workspace_allocator, opt.num_threads);
@@ -69,8 +74,15 @@ namespace ncnn {
             return -100;
 
         // Make (dilation * dilation) batches
+
+#if __APPLE__
+        __block Mat inner_bottom_blob;
+        __block Mat inner_top_blob;
+#else
         Mat inner_bottom_blob;
         Mat inner_top_blob;
+#endif
+
         for (int x = 0; x < dilation; x ++)
         {
             for (int y = 0; y < dilation; y ++)

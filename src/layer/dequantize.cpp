@@ -142,8 +142,9 @@ namespace ncnn {
                 }
 #endif
             }
-
-            return 0;
         }
 
-    } // namespace ncnn
+        return 0;
+    }
+
+} // namespace ncnn

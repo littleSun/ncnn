@@ -172,8 +172,14 @@ int YoloDetectionOutput::forward_inplace(Mat& bottom_top_blob, const Option& opt
     if (channels_per_box != 4 + 1 + num_class)
         return -1;
 
+#if __APPLE__
+    __block std::vector< std::vector<BBoxRect> > all_box_bbox_rects;
+    __block std::vector< std::vector<float> > all_box_bbox_scores;
+#else
     std::vector< std::vector<BBoxRect> > all_box_bbox_rects;
     std::vector< std::vector<float> > all_box_bbox_scores;
+#endif
+
     all_box_bbox_rects.resize(num_box);
     all_box_bbox_scores.resize(num_box);
 
